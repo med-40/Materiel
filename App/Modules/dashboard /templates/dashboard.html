@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}لوحة التحكم{% endblock %}
+
+{% block content %}
+<h2>مرحبًا، {{ user.full_name }}</h2>
+
+<div class="cards-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ total_equipment }}</div>
+        <div class="stat-label">إجمالي العتاد</div>
+    </div>
+    {% for status, count in status_counts.items() %}
+    <div class="stat-card">
+        <div class="stat-number">{{ count }}</div>
+        <div class="stat-label">{{ status }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card">
+    <p>هذه لوحة تحكم أولية. الوحدات القادمة (الصيانة، الوقود، الأعطال، المهمات)
+    ستضيف مؤشراتها وتنبيهاتها هنا تلقائيًا دون أي تعديل على الوحدات الحالية.</p>
+</div>
+{% endblock %}
