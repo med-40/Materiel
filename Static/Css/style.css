@@ -1,5 +1,5 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body {
+body 
     font-family: "Segoe UI", Tahoma, sans-serif;
     background: #f4f6f8;
     color: #1f2937;
@@ -76,9 +76,20 @@ button:hover { background: #16304d; }
 .empty { text-align: center; color: #9ca3af; padding: 20px; }
 
 .badge { padding: 3px 10px; border-radius: 12px; font-size: 12px; background: #e5e7eb; }
-.badge-active { background: #d1fae5; color: #065f46; }
-.badge-in_maintenance { background: #fef3c7; color: #92400e; }
-.badge-out_of_service { background: #fee2e2; color: #991b1b; }
+
+/* الحالة الفنية */
+.badge-condition-ready { background: #d1fae5; color: #065f46; }
+.badge-condition-broken { background: #fee2e2; color: #991b1b; }
+
+/* الوضعية */
+.badge-status-available { background: #d1fae5; color: #065f46; }
+.badge-status-in_mission { background: #dbeafe; color: #1e40af; }
+.badge-status-in_maintenance { background: #fef3c7; color: #92400e; }
+.badge-status-in_external_workshop { background: #fde68a; color: #78350f; }
+.badge-status-unavailable { background: #e5e7eb; color: #374151; }
+
+.stat-alert { border: 2px solid #fca5a5; }
+.stat-alert .stat-number { color: #991b1b; }
 
 /* ---- Login ---- */
 .login-body { display: flex; align-items: center; justify-content: center; height: 100vh; }
