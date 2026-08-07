@@ -27,8 +27,9 @@ def dashboard_page(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    status_counts = equipment_services.count_by_status(db)
+    status_counts = equipment_services.count_by_operational_status(db)
     total_equipment = sum(status_counts.values())
+    broken_count = equipment_services.count_broken(db)
 
     return templates.TemplateResponse(
         "dashboard.html",
@@ -37,5 +38,6 @@ def dashboard_page(
             "user": current_user,
             "total_equipment": total_equipment,
             "status_counts": status_counts,
+            "broken_count": broken_count,
         },
     )
