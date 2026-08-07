@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}العتاد والسيارات{% endblock %}
+
+{% block content %}
+<h2>العتاد والسيارات</h2>
+
+<div class="card">
+    <h3>إضافة عتاد جديد</h3>
+    <form method="post" action="/equipment/create" class="inline-form">
+        <input type="text" name="asset_code" placeholder="رقم العتاد" required>
+        <input type="text" name="category" placeholder="الفئة (سيارة/شاحنة...)" required>
+        <input type="text" name="plate_number" placeholder="رقم اللوحة">
+        <input type="text" name="make" placeholder="الصانع">
+        <input type="text" name="model" placeholder="الموديل">
+        <button type="submit">إضافة</button>
+    </form>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>رقم العتاد</th>
+            <th>الفئة</th>
+            <th>اللوحة</th>
+            <th>الصانع / الموديل</th>
+            <th>الحالة</th>
+            <th>العداد</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.id }}</td>
+            <td>{{ item.asset_code }}</td>
+            <td>{{ item.category }}</td>
+            <td>{{ item.plate_number or "-" }}</td>
+            <td>{{ item.make or "-" }} {{ item.model or "" }}</td>
+            <td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td>
+            <td>{{ item.current_odometer or 0 }} كم</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">لا يوجد عتاد مسجّل بعد</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
