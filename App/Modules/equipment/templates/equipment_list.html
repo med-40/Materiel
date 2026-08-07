@@ -7,11 +7,22 @@
 <div class="card">
     <h3>إضافة عتاد جديد</h3>
     <form method="post" action="/equipment/create" class="inline-form">
-        <input type="text" name="asset_code" placeholder="رقم العتاد" required>
-        <input type="text" name="category" placeholder="الفئة (سيارة/شاحنة...)" required>
-        <input type="text" name="plate_number" placeholder="رقم اللوحة">
-        <input type="text" name="make" placeholder="الصانع">
-        <input type="text" name="model" placeholder="الموديل">
+        <input type="text" name="asset_code" placeholder="رقم العتاد الداخلي" required>
+        <input type="text" name="category" placeholder="نوع العتاد (سيارة/شاحنة...)" required>
+        <input type="text" name="registration_number" placeholder="رقم التسجيل">
+        <input type="text" name="vin" placeholder="رقم الهيكل">
+        <input type="text" name="model" placeholder="الطراز">
+        <select name="technical_condition">
+            <option value="ready">جاهز</option>
+            <option value="broken">عاطل</option>
+        </select>
+        <select name="operational_status">
+            <option value="available">متاح</option>
+            <option value="in_mission">في مهمة</option>
+            <option value="in_maintenance">في الصيانة</option>
+            <option value="in_external_workshop">في ورشة خارجية</option>
+            <option value="unavailable">غير متاح</option>
+        </select>
         <button type="submit">إضافة</button>
     </form>
 </div>
@@ -21,11 +32,14 @@
         <tr>
             <th>#</th>
             <th>رقم العتاد</th>
-            <th>الفئة</th>
-            <th>اللوحة</th>
-            <th>الصانع / الموديل</th>
-            <th>الحالة</th>
-            <th>العداد</th>
+            <th>النوع</th>
+            <th>رقم التسجيل</th>
+            <th>رقم الهيكل</th>
+            <th>الطراز</th>
+            <th>الحالة الفنية</th>
+            <th>الوضعية</th>
+            <th>عداد الكم</th>
+            <th>عداد الساعة</th>
         </tr>
     </thead>
     <tbody>
@@ -34,13 +48,29 @@
             <td>{{ item.id }}</td>
             <td>{{ item.asset_code }}</td>
             <td>{{ item.category }}</td>
-            <td>{{ item.plate_number or "-" }}</td>
-            <td>{{ item.make or "-" }} {{ item.model or "" }}</td>
-            <td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td>
+            <td>{{ item.registration_number or "-" }}</td>
+            <td>{{ item.vin or "-" }}</td>
+            <td>{{ item.model or "-" }}</td>
+            <td>
+                <span class="badge badge-condition-{{ item.technical_condition }}">
+                    {{ "جاهز" if item.technical_condition == "ready" else "عاطل" }}
+                </span>
+            </td>
+            <td>
+                <span class="badge badge-status-{{ item.operational_status }}">
+                    {% if item.operational_status == "available" %}متاح
+                    {% elif item.operational_status == "in_mission" %}في مهمة
+                    {% elif item.operational_status == "in_maintenance" %}في الصيانة
+                    {% elif item.operational_status == "in_external_workshop" %}في ورشة خارجية
+                    {% else %}غير متاح
+                    {% endif %}
+                </span>
+            </td>
             <td>{{ item.current_odometer or 0 }} كم</td>
+            <td>{{ item.current_hours or 0 }} س</td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="empty">لا يوجد عتاد مسجّل بعد</td></tr>
+        <tr><td colspan="9" class="empty">لا يوجد عتاد مسجّل بعد</td></tr>
         {% endfor %}
     </tbody>
 </table>
