@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -34,13 +34,13 @@ def equipment_page(
 @router.post("/equipment/create")
 def equipment_create_form(
     request: Request,
-    asset_code: str,
-    category: str,
-    registration_number: str = "",
-    vin: str = "",
-    model: str = "",
-    technical_condition: str = "ready",
-    operational_status: str = "available",
+    asset_code: str = Form(...),
+    category: str = Form(...),
+    registration_number: str = Form(""),
+    vin: str = Form(""),
+    model: str = Form(""),
+    technical_condition: str = Form("ready"),
+    operational_status: str = Form("available"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
