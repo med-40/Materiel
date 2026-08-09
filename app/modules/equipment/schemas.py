@@ -15,13 +15,11 @@ OPERATIONAL_STATUSES = {
 
 class EquipmentBase(BaseModel):
     asset_code: str
+    acquisition_document: Optional[str] = None
     registration_number: Optional[str] = None
     vin: Optional[str] = None
-    category: str
-    make: Optional[str] = None
-    model: Optional[str] = None
-    year: Optional[int] = None
-    acquisition_document: Optional[str] = None
+    equipment_type_id: int
+    equipment_model_id: Optional[int] = None
     acquisition_date: Optional[date] = None
     technical_condition: str = "ready"
     operational_status: str = "available"
@@ -49,13 +47,11 @@ class EquipmentCreate(EquipmentBase):
 
 
 class EquipmentUpdate(BaseModel):
+    acquisition_document: Optional[str] = None
     registration_number: Optional[str] = None
     vin: Optional[str] = None
-    category: Optional[str] = None
-    make: Optional[str] = None
-    model: Optional[str] = None
-    year: Optional[int] = None
-    acquisition_document: Optional[str] = None
+    equipment_type_id: Optional[int] = None
+    equipment_model_id: Optional[int] = None
     acquisition_date: Optional[date] = None
     technical_condition: Optional[str] = None
     operational_status: Optional[str] = None
@@ -78,9 +74,20 @@ class EquipmentUpdate(BaseModel):
         return v
 
 
-class EquipmentOut(EquipmentBase):
+class EquipmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    asset_code: str
+    acquisition_document: Optional[str] = None
+    registration_number: Optional[str] = None
+    vin: Optional[str] = None
+    equipment_type_id: int
+    equipment_model_id: Optional[int] = None
+    technical_condition: str
+    operational_status: str
+    current_odometer: Optional[Decimal] = None
+    current_hours: Optional[Decimal] = None
+    notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime

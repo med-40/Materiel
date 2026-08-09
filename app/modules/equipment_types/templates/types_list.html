@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}أنواع العتاد{% endblock %}
+
+{% block content %}
+<h2>إدارة أنواع العتاد والطُرز</h2>
+<p class="page-hint">هذه الصفحة للمستخدم الرئيسي فقط — القوائم هنا تظهر بالضبط بصفحة إضافة العتاد.</p>
+
+<div class="card">
+    <h3>إضافة نوع عتاد جديد</h3>
+    <form method="post" action="/equipment-types/create" class="inline-form">
+        <input type="text" name="name" placeholder="اسم النوع (مثال: سيارة، مولد كهرباء)" required>
+        <label class="checkbox-label">
+            <input type="checkbox" name="has_hour_meter" value="true">
+            هذا النوع يحتاج عداد ساعات
+        </label>
+        <button type="submit">إضافة النوع</button>
+    </form>
+</div>
+
+{% for t in types %}
+<div class="card type-card">
+    <div class="type-card-header">
+        <h3>{{ t.name }}
+            {% if t.has_hour_meter %}<span class="badge badge-status-in_mission">عداد ساعات مُفعّل</span>{% endif %}
+        </h3>
+        <form method="post" action="/equipment-types/{{ t.id }}/delete" onsubmit="return confirm('حذف هذا النوع سيحذف كل طُرزه المرتبطة، متأكد؟');">
+            <button type="submit" class="btn-danger">حذف النوع</button>
+        </form>
+    </div>
+
+    <form method="post" action="/equipment-types/models/create" class="inline-form">
+        <input type="hidden" name="equipment_type_id" value="{{ t.id }}">
+        <input type="text" name="name" placeholder="اسم طراز جديد تحت {{ t.name }}" required>
+        <button type="submit">إضافة طراز</button>
+    </form>
+
+    <div class="model-chips">
+        {% for m in t.models %}
+        <span class="chip">
+            {{ m.name }}
+            <form method="post" action="/equipment-types/models/{{ m.id }}/delete" class="chip-delete-form">
+                <button type="submit" title="حذف">×</button>
+            </form>
+        </span>
+        {% else %}
+        <span class="empty-inline">لا توجد طُرز بعد لهذا النوع</span>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="card"><p class="empty">لا توجد أنواع عتاد مسجّلة بعد. أضف أول نوع بالأعلى.</p></div>
+{% endfor %}
+{% endblock %}

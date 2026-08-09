@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.modules.equipment.models import Equipment
 from app.modules.equipment.schemas import EquipmentCreate, EquipmentUpdate
@@ -8,15 +8,20 @@ from app.modules.equipment.schemas import EquipmentCreate, EquipmentUpdate
 def list_equipment(
     db: Session,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 500,
     operational_status: Optional[str] = None,
     technical_condition: Optional[str] = None,
+    equipment_type_id: Optional[int] = None,
 ) -> list[Equipment]:
-    query = db.query(Equipment)
+    query = db.query(Equipment).options(
+        joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model)
+    )
     if operational_status:
         query = query.filter(Equipment.operational_status == operational_status)
     if technical_condition:
         query = query.filter(Equipment.technical_condition == technical_condition)
+    if equipment_type_id:
+        query = query.filter(Equipment.equipment_type_id == equipment_type_id)
     return query.order_by(Equipment.id.desc()).offset(skip).limit(limit).all()
 
 
