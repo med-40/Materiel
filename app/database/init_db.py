@@ -13,11 +13,9 @@ from app.database.base import Base
 from app.database.session import engine
 
 # --- تسجيل موديلات كل وحدة ---
-# ملاحظة: الاستيراد نفسه (حتى لو غير مستخدم مباشرة بهذا الملف) كافٍ لتسجيل
-# الجدول في Base.metadata. لذلك نُبقي الاستيراد حتى لو أظهر المحرر تحذير
-# "unused import".
-from app.modules.users import models as users_models          # noqa: F401
-from app.modules.equipment import models as equipment_models  # noqa: F401
+from app.modules.users import models as users_models                    # noqa: F401
+from app.modules.equipment_types import models as equipment_types_models  # noqa: F401
+from app.modules.equipment import models as equipment_models            # noqa: F401
 
 
 def init_db() -> None:
@@ -47,6 +45,4 @@ def create_default_admin() -> None:
                     role="admin",
                 ),
             )
-            print("[init_db] تم إنشاء مستخدم افتراضي: admin / Admin@123")
-    finally:
-        db.close()
+            print("[init_db] تم إنشاء مستخدم
