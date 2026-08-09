@@ -1,5 +1,5 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body 
+body {
     font-family: "Segoe UI", Tahoma, sans-serif;
     background: #f4f6f8;
     color: #1f2937;
@@ -79,36 +79,3 @@ button:hover { background: #16304d; }
 
 /* الحالة الفنية */
 .badge-condition-ready { background: #d1fae5; color: #065f46; }
-.badge-condition-broken { background: #fee2e2; color: #991b1b; }
-
-/* الوضعية */
-.badge-status-available { background: #d1fae5; color: #065f46; }
-.badge-status-in_mission { background: #dbeafe; color: #1e40af; }
-.badge-status-in_maintenance { background: #fef3c7; color: #92400e; }
-.badge-status-in_external_workshop { background: #fde68a; color: #78350f; }
-.badge-status-unavailable { background: #e5e7eb; color: #374151; }
-
-.stat-alert { border: 2px solid #fca5a5; }
-.stat-alert .stat-number { color: #991b1b; }
-
-/* ---- Login ---- */
-.login-body { display: flex; align-items: center; justify-content: center; height: 100vh; }
-.login-box {
-    background: #fff;
-    padding: 36px;
-    border-radius: 10px;
-    width: 340px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-    text-align: center;
-}
-.login-box h1 { font-size: 20px; color: #1e3a5f; margin-bottom: 4px; }
-.subtitle { color: #6b7280; margin-bottom: 20px; }
-.login-box form { display: flex; flex-direction: column; gap: 6px; text-align: right; }
-.login-box label { font-size: 13px; color: #374151; margin-top: 8px; }
-.login-box input {
-    padding: 9px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-}
-.login-box button { margin-top: 18px; }
-.alert-error { background: #fee2e2; color: #991b1b; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
