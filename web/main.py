@@ -18,6 +18,7 @@ from app.database.init_db import init_db, create_default_admin
 
 # --- راوترز الوحدات ---
 from app.modules.users.router import router as users_router
+from app.modules.equipment_types.router import router as equipment_types_router
 from app.modules.equipment.router import router as equipment_router
 from app.modules.dashboard.router import router as dashboard_router
 
@@ -27,23 +28,4 @@ def create_app() -> FastAPI:
 
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
-    # تسجيل كل وحدة براوترها الخاص - بدون prefix مشترك حاليًا لإبقاء المسارات
-    # بسيطة (/equipment بدل /api/v1/equipment/equipment). يمكن لاحقًا إضافة
-    # prefix موحّد لكل الـ API عند الحاجة دون التأثير على بقية الوحدات.
-    app.include_router(users_router, tags=["users"])
-    app.include_router(equipment_router, tags=["equipment"])
-    app.include_router(dashboard_router, tags=["dashboard"])
-
-    @app.on_event("startup")
-    def on_startup():
-        init_db()
-        create_default_admin()
-
-    @app.get("/")
-    def root():
-        return RedirectResponse(url="/dashboard")
-
-    return app
-
-
-app = create_app()
+    app.in
