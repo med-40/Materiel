@@ -2,76 +2,61 @@
 {% block title %}العتاد والسيارات{% endblock %}
 
 {% block content %}
-<h2>العتاد والسيارات</h2>
-
-<div class="card">
-    <h3>إضافة عتاد جديد</h3>
-    <form method="post" action="/equipment/create" class="inline-form">
-        <input type="text" name="asset_code" placeholder="رقم العتاد الداخلي" required>
-        <input type="text" name="category" placeholder="نوع العتاد (سيارة/شاحنة...)" required>
-        <input type="text" name="registration_number" placeholder="رقم التسجيل">
-        <input type="text" name="vin" placeholder="رقم الهيكل">
-        <input type="text" name="model" placeholder="الطراز">
-        <select name="technical_condition">
-            <option value="ready">جاهز</option>
-            <option value="broken">عاطل</option>
-        </select>
-        <select name="operational_status">
-            <option value="available">متاح</option>
-            <option value="in_mission">في مهمة</option>
-            <option value="in_maintenance">في الصيانة</option>
-            <option value="in_external_workshop">في ورشة خارجية</option>
-            <option value="unavailable">غير متاح</option>
-        </select>
-        <button type="submit">إضافة</button>
-    </form>
+<div class="page-header">
+    <h2>العتاد والسيارات</h2>
+    <button type="button" class="btn-primary" onclick="toggleAddForm()">+ إضافة عتاد</button>
 </div>
 
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>رقم العتاد</th>
-            <th>النوع</th>
-            <th>رقم التسجيل</th>
-            <th>رقم الهيكل</th>
-            <th>الطراز</th>
-            <th>الحالة الفنية</th>
-            <th>الوضعية</th>
-            <th>عداد الكم</th>
-            <th>عداد الساعة</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in items %}
-        <tr>
-            <td>{{ item.id }}</td>
-            <td>{{ item.asset_code }}</td>
-            <td>{{ item.category }}</td>
-            <td>{{ item.registration_number or "-" }}</td>
-            <td>{{ item.vin or "-" }}</td>
-            <td>{{ item.model or "-" }}</td>
-            <td>
-                <span class="badge badge-condition-{{ item.technical_condition }}">
-                    {{ "جاهز" if item.technical_condition == "ready" else "عاطل" }}
-                </span>
-            </td>
-            <td>
-                <span class="badge badge-status-{{ item.operational_status }}">
-                    {% if item.operational_status == "available" %}متاح
-                    {% elif item.operational_status == "in_mission" %}في مهمة
-                    {% elif item.operational_status == "in_maintenance" %}في الصيانة
-                    {% elif item.operational_status == "in_external_workshop" %}في ورشة خارجية
-                    {% else %}غير متاح
-                    {% endif %}
-                </span>
-            </td>
-            <td>{{ item.current_odometer or 0 }} كم</td>
-            <td>{{ item.current_hours or 0 }} س</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="9" class="empty">لا يوجد عتاد مسجّل بعد</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% endblock %}
+<div class="card" id="add-form-card" style="display:none;">
+    <h3>إضافة عتاد جديد</h3>
+    <form method="post" action="/equipment/create" class="grid-form">
+        <div class="field">
+            <label>الرقم الداخلي *</label>
+            <input type="text" name="asset_code" required>
+        </div>
+        <div class="field">
+            <label>الوثيقة</label>
+            <input type="text" name="acquisition_document">
+        </div>
+        <div class="field">
+            <label>نوع العتاد *</label>
+            <select name="equipment_type_id" id="type-select" required onchange="onTypeChange()">
+                <option value="">اختر النوع...</option>
+                {% for t in types %}
+                <option value="{{ t.id }}" data-hour-meter="{{ 'true' if t.has_hour_meter else 'false' }}">{{ t.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>الطراز</label>
+            <select name="equipment_model_id" id="model-select">
+                <option value="">اختر النوع أولاً</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>رقم التسجيل</label>
+            <input type="text" name="registration_number">
+        </div>
+        <div class="field">
+            <label>رقم الهيكل</label>
+            <input type="text" name="vin">
+        </div>
+        <div class="field">
+            <label>عداد الكم</label>
+            <input type="number" step="0.1" name="current_odometer" value="0">
+        </div>
+        <div class="field" id="hour-meter-field" style="display:none;">
+            <label>عداد الساعات</label>
+            <input type="number" step="0.1" name="current_hours" value="0">
+        </div>
+        <div class="field">
+            <label>الحالة الفنية</label>
+            <select name="technical_condition">
+                <option value="ready">جاهز</option>
+                <option value="broken">عاطل</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>الوضعية</label>
+            <select name="operational_status">
+                <option value="available">متاح
