@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}الصيانة والأعطال{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>الصيانة والأعطال</h2>
+    <div>
+        {% if user.role == "admin" %}
+        <a href="/maintenance/settings" class="btn-secondary">إعدادات الصيانة</a>
+        {% endif %}
+        <button type="button" class="btn-primary" onclick="toggleAddForm()">+ فتح أمر صيانة</button>
+    </div>
+</div>
+
+<div class="card" id="add-form-card" style="display:none;">
+    <h3>فتح أمر صيانة جديد</h3>
+    <form method="post" action="/maintenance/create" class="grid-form">
+        <div class="field">
+            <label>العتاد *</label>
+            <select name="equipment_id" id="equipment-select" required onchange="loadDueSchedules(this.value)">
+                <option value="">اختر العتاد...</option>
+                {% for e in equipment_list %}
+                <option value="{{ e.id }}">{{ e.asset_code }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>خطة صيانة مبرمجة (اختياري)</label>
+            <select name="maintenance_schedule_id" id="schedule-select">
+                <option value="">صيانة غير مبرمجة (يدوية)</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>تاريخ الأمر *</label>
+            <input type="date" name="reported_date" required>
+        </div>
+        <div class="field">
+            <label>الوصف</label>
+            <input type="text" name="description">
+        </div>
+        <div class="field">
+            <button type="submit" class="btn-primary">حفظ الأمر</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>العتاد</th>
+                <th>النوع</th>
+                <th>تاريخ الأمر</th>
+                <th>الوصف</th>
+                <th>الحالة</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in records %}
+            <tr>
+                <td>{{ r.equipment.asset_code }}</td>
+                <td>{{ "مبرمجة" if r.is_scheduled else "غير مبرمجة" }}</td>
+                <td>{{ r.reported_date }}</td>
+                <td>{{ r.description or "-" }}</td>
+                <td><span class="badge badge-danger">مفتوح</span></td>
+                <td>
+                    <form method="post" action="/maintenance/{{ r.id }}/close" class="inline-form">
+                        <input type="date" name="resolved_date" required>
+                        <input type="number" step="0.1" name="meter_reading" placeholder="قراءة العداد">
+                        <input type="text" name="performed_by" placeholder="المنفذ">
+                        <input type="text" name="resolution_notes" placeholder="ملاحظات">
+                        <button type="submit" class="btn-secondary">إغلاق الأمر</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">لا توجد أوامر صيانة مفتوحة حاليًا</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+function toggleAddForm() {
+    const card = document.getElementById('add-form-card');
+    card.style.display = card.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadDueSchedules(equipmentId) {
+    const scheduleSelect = document.getElementById('schedule-select');
+    scheduleSelect.innerHTML = '<option value="">صيانة غير مبرمجة (يدوية)</option>';
+    if (!equipmentId) return;
+
+    try {
+        const res = await fetch(`/api/maintenance/equipment/${equipmentId}/due`);
+        const schedules = await res.json();
+        schedules.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = `${s.name} (${s.internal_code})`;
+            scheduleSelect.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('تعذر تحميل الصيانات المستحقة', e);
+    }
+}
+</script>
+{% endblock %}

@@ -36,12 +36,12 @@ def types_page(
 def create_type_form(
     request: Request,
     name: str = Form(...),
-    has_hour_meter: bool = Form(False),
+    measurement_unit: str = Form(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(Role.ADMIN)),
 ):
     try:
-        services.create_type(db, EquipmentTypeCreate(name=name, has_hour_meter=has_hour_meter))
+        services.create_type(db, EquipmentTypeCreate(name=name, measurement_unit=measurement_unit))
     except ValueError:
         pass
     return RedirectResponse(url="/equipment-types", status_code=status.HTTP_302_FOUND)

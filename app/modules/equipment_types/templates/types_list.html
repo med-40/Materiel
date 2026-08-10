@@ -9,10 +9,11 @@
     <h3>إضافة نوع عتاد جديد</h3>
     <form method="post" action="/equipment-types/create" class="inline-form">
         <input type="text" name="name" placeholder="اسم النوع (مثال: سيارة، مولد كهرباء)" required>
-        <label class="checkbox-label">
-            <input type="checkbox" name="has_hour_meter" value="true">
-            هذا النوع يحتاج عداد ساعات
-        </label>
+        <select name="measurement_unit" required>
+            <option value="">وحدة القياس *</option>
+            <option value="km">كيلومترات (عداد المسافة)</option>
+            <option value="hours">ساعات التشغيل</option>
+        </select>
         <button type="submit">إضافة النوع</button>
     </form>
 </div>
@@ -21,7 +22,7 @@
 <div class="card type-card">
     <div class="type-card-header">
         <h3>{{ t.name }}
-            {% if t.has_hour_meter %}<span class="badge badge-status-in_mission">عداد ساعات مُفعّل</span>{% endif %}
+            <span class="badge badge-status-in_mission">{{ "كيلومترات" if t.measurement_unit == "km" else "ساعات" }}</span>
         </h3>
         <form method="post" action="/equipment-types/{{ t.id }}/delete" onsubmit="return confirm('حذف هذا النوع سيحذف كل طُرزه المرتبطة، متأكد؟');">
             <button type="submit" class="btn-danger">حذف النوع</button>

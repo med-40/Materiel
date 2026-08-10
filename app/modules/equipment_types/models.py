@@ -9,7 +9,7 @@ class EquipmentType(Base, TimestampMixin):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(80), unique=True, nullable=False)
-    has_hour_meter = Column(Boolean, nullable=False, default=False)
+    measurement_unit = Column(String(10), nullable=False)  # "km" أو "hours" — إجباري، بدون قيمة افتراضية
 
     models = relationship(
         "EquipmentModel", back_populates="equipment_type", cascade="all, delete-orphan"

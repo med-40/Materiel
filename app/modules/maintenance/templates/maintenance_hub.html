@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}إدارة الصيانة{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>إدارة الصيانة</h2>
+    {% if user.role == "admin" %}
+    <a href="/maintenance/settings" class="btn-secondary">إعدادات الصيانة</a>
+    {% endif %}
+</div>
+
+<div class="maint-hub-grid">
+    <a href="/maintenance/periodic" class="maint-hub-card">
+        <span class="maint-hub-icon">🔧</span>
+        <span class="maint-hub-title">الصيانة الدورية</span>
+    </a>
+    <a href="/maintenance/repairs" class="maint-hub-card">
+        <span class="maint-hub-icon">🛠️</span>
+        <span class="maint-hub-title">التصليحات</span>
+    </a>
+    <a href="/maintenance/depot-day" class="maint-hub-card">
+        <span class="maint-hub-icon">🏭</span>
+        <span class="maint-hub-title">يوم الحضيرة</span>
+    </a>
+    <a href="/maintenance/annual-plan" class="maint-hub-card">
+        <span class="maint-hub-icon">📅</span>
+        <span class="maint-hub-title">مخطط الصيانة السنوي</span>
+    </a>
+    <a href="/maintenance/inspections" class="maint-hub-card">
+        <span class="maint-hub-icon">✅</span>
+        <span class="maint-hub-title">التفتيشات الدورية</span>
+    </a>
+</div>
+
+<div class="card">
+    <h3>إشعارات الصيانة المستحقة</h3>
+    {% if notifications %}
+    <div class="maint-notif-list">
+        {% for n in notifications %}
+        <a href="{{ n.url }}" class="maint-notif-item maint-notif-{{ n.severity }}">
+            <span class="maint-notif-main">{{ n.title }}</span>
+            <span class="maint-notif-badge">
+                {{ "متأخر" if n.severity == "overdue" else "قريب الاستحقاق" }}
+            </span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty">لا توجد صيانات مستحقة أو قريبة حاليًا. كل العتاد بحالة جيدة.</p>
+    {% endif %}
+</div>
+
+<style>
+.maint-hub-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 14px;
+    margin: 20px 0;
+}
+.maint-hub-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px 12px;
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    text-decoration: none;
+    color: #1f2937;
+    transition: box-shadow 0.15s, transform 0.15s;
+}
+.maint-hub-card:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    transform: translateY(-2px);
+}
+.maint-hub-icon { font-size: 28px; }
+.maint-hub-title { font-weight: 600; font-size: 14px; text-align: center; }
+
+.maint-notif-list { display: flex; flex-direction: column; gap: 8px; }
+.maint-notif-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border-inline-start: 4px solid;
+    text-decoration: none;
+    color: inherit;
+}
+.maint-notif-item.maint-notif-overdue {
+    background: #fef2f2;
+    border-inline-start-color: #dc2626;
+}
+.maint-notif-item.maint-notif-upcoming {
+    background: #fff7ed;
+    border-inline-start-color: #ea580c;
+}
+.maint-notif-badge { font-size: 12px; font-weight: 600; }
+.maint-notif-overdue .maint-notif-badge { color: #dc2626; }
+.maint-notif-upcoming .maint-notif-badge { color: #ea580c; }
+</style>
+{% endblock %}

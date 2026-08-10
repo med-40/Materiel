@@ -33,13 +33,25 @@ def get_by_asset_code(db: Session, asset_code: str) -> Optional[Equipment]:
     return db.query(Equipment).filter(Equipment.asset_code == asset_code).first()
 
 
+def generate_asset_code(db: Session, registration_number: Optional[str] = None) -> str:
+    if registration_number:
+        return f"EQ-{registration_number}"
+    count = db.query(Equipment).filter(Equipment.registration_number.is_(None)).count()
+    next_number = count + 1
+    code = f"EQ-TMP-{next_number}"
+    while get_by_asset_code(db, code):
+        next_number += 1
+        code = f"EQ-TMP-{next_number}"
+    return code
+
+
 def create_equipment(
     db: Session, data: EquipmentCreate, user_id: Optional[int] = None
 ) -> Equipment:
-    if get_by_asset_code(db, data.asset_code):
-        raise ValueError("رقم العتاد (asset_code) موجود مسبقًا")
-
-    equipment = Equipment(**data.model_dump(), created_by_id=user_id, updated_by_id=user_id)
+    asset_code = generate_asset_code(db, data.registration_number)
+    equipment = Equipment(
+        **data.model_dump(), asset_code=asset_code, created_by_id=user_id, updated_by_id=user_id
+    )
     db.add(equipment)
     db.commit()
     db.refresh(equipment)
@@ -75,3 +87,39 @@ def count_by_operational_status(db: Session) -> dict[str, int]:
 
 def count_broken(db: Session) -> int:
     return db.query(Equipment).filter(Equipment.technical_condition == "broken").count()
+
+
+def update_technical_condition(db: Session, equipment_id: int, condition: str) -> Optional[Equipment]:
+    """يُستدعى من وحدات أخرى (مثل maintenance) لتحديث الحالة الفنية آليًا."""
+    equipment = get_equipment(db, equipment_id)
+    if not equipment:
+        return None
+    equipment.technical_condition = condition
+    db.commit()
+    db.refresh(equipment)
+    return equipment
+
+
+def update_operational_status(db: Session, equipment_id: int, status: str) -> Optional[Equipment]:
+    """يُستدعى من وحدات أخرى (مثل maintenance) لتحديث الوضعية آليًا."""
+    equipment = get_equipment(db, equipment_id)
+    if not equipment:
+        return None
+    equipment.operational_status = status
+    db.commit()
+    db.refresh(equipment)
+    return equipment
+
+
+def update_meters(db: Session, equipment_id: int, odometer=None, hours=None) -> Optional[Equipment]:
+    """يُستدعى من وحدات أخرى (مثل maintenance) لتحديث قراءة العداد الحالية آليًا."""
+    equipment = get_equipment(db, equipment_id)
+    if not equipment:
+        return None
+    if odometer is not None:
+        equipment.current_odometer = odometer
+    if hours is not None:
+        equipment.current_hours = hours
+    db.commit()
+    db.refresh(equipment)
+    return equipment

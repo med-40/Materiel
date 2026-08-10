@@ -25,7 +25,7 @@ def get_type_by_name(db: Session, name: str) -> Optional[EquipmentType]:
 def create_type(db: Session, data: EquipmentTypeCreate) -> EquipmentType:
     if get_type_by_name(db, data.name):
         raise ValueError("نوع العتاد موجود مسبقًا")
-    obj = EquipmentType(name=data.name, has_hour_meter=data.has_hour_meter)
+    obj = EquipmentType(name=data.name, measurement_unit=data.measurement_unit)
     db.add(obj)
     db.commit()
     db.refresh(obj)

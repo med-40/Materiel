@@ -14,7 +14,6 @@ OPERATIONAL_STATUSES = {
 
 
 class EquipmentBase(BaseModel):
-    asset_code: str
     acquisition_document: Optional[str] = None
     registration_number: Optional[str] = None
     vin: Optional[str] = None
