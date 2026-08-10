@@ -137,7 +137,7 @@
             data-condition="{{ 'جاهز' if item.technical_condition == 'ready' else 'عاطل' }}"
             data-search="{{ item.asset_code }} {{ item.registration_number or '' }} {{ item.vin or '' }}">
             <td>{{ item.id }}</td>
-            <td class="cell-strong">{{ item.asset_code }}</td>
+            <td class="cell-strong"><a href="/equipment/{{ item.id }}">{{ item.asset_code }}</a></td>
             <td class="col-doc">{{ item.acquisition_document or "-" }}</td>
             <td>{{ item.equipment_type.name if item.equipment_type else "-" }}</td>
             <td class="col-model">{{ item.equipment_model.name if item.equipment_model else "-" }}</td>

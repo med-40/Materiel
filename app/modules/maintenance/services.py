@@ -267,7 +267,7 @@ def complete_maintenance_record(
 
     if meter_reading is not None:
         equipment = equipment_services.get_equipment(db, record.equipment_id)
-        if equipment and equipment.equipment_type and equipment.equipment_type.has_hour_meter:
+        if equipment and equipment.equipment_type and equipment.equipment_type.measurement_unit == "hours":
             record_meter_reading(db, record.equipment_id, resolved_date, hours_value=meter_reading, source="maintenance_record")
         else:
             record_meter_reading(db, record.equipment_id, resolved_date, odometer_value=meter_reading, source="maintenance_record")
