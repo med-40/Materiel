@@ -16,77 +16,148 @@ from app.modules.maintenance import services
 from app.modules.notifications import services as notifications_services
 from app.modules.users.models import User
 
+
 router = APIRouter()
-templates = get_module_templates("app/modules/maintenance/templates")
 
-notifications_services.register_provider(services.get_maintenance_notifications)
+templates = get_module_templates(
+    "app/modules/maintenance/templates"
+)
+
+notifications_services.register_provider(
+    services.get_maintenance_notifications
+)
 
 
-@router.get("/maintenance", response_class=HTMLResponse)
+# ============================================================
+# الصفحة الرئيسية للصيانة
+# ============================================================
+
+@router.get(
+    "/maintenance",
+    response_class=HTMLResponse,
+)
 def maintenance_hub(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     notifications = notifications_services.get_all_notifications(db)
+
     return templates.TemplateResponse(
         "maintenance_hub.html",
-        {"request": request, "notifications": notifications, "user": current_user},
+        {
+            "request": request,
+            "notifications": notifications,
+            "user": current_user,
+        },
     )
 
 
-@router.get("/maintenance/repairs", response_class=HTMLResponse)
+# ============================================================
+# التصليحات - مؤقتًا
+# ============================================================
+
+@router.get(
+    "/maintenance/repairs",
+    response_class=HTMLResponse,
+)
 def maintenance_repairs_placeholder(
     request: Request,
     current_user: User = Depends(get_current_user),
 ):
     return templates.TemplateResponse(
         "maintenance_placeholder.html",
-        {"request": request, "user": current_user, "section_title": "التصليحات"},
+        {
+            "request": request,
+            "user": current_user,
+            "section_title": "التصليحات",
+        },
     )
 
 
-@router.get("/maintenance/depot-day", response_class=HTMLResponse)
+# ============================================================
+# يوم الحضيرة - مؤقتًا
+# ============================================================
+
+@router.get(
+    "/maintenance/depot-day",
+    response_class=HTMLResponse,
+)
 def maintenance_depot_day_placeholder(
     request: Request,
     current_user: User = Depends(get_current_user),
 ):
     return templates.TemplateResponse(
         "maintenance_placeholder.html",
-        {"request": request, "user": current_user, "section_title": "يوم الحضيرة"},
+        {
+            "request": request,
+            "user": current_user,
+            "section_title": "يوم الحضيرة",
+        },
     )
 
 
-@router.get("/maintenance/annual-plan", response_class=HTMLResponse)
+# ============================================================
+# المخطط السنوي - مؤقتًا
+# ============================================================
+
+@router.get(
+    "/maintenance/annual-plan",
+    response_class=HTMLResponse,
+)
 def maintenance_annual_plan_placeholder(
     request: Request,
     current_user: User = Depends(get_current_user),
 ):
     return templates.TemplateResponse(
         "maintenance_placeholder.html",
-        {"request": request, "user": current_user, "section_title": "مخطط الصيانة السنوي"},
+        {
+            "request": request,
+            "user": current_user,
+            "section_title": "مخطط الصيانة السنوي",
+        },
     )
 
 
-@router.get("/maintenance/inspections", response_class=HTMLResponse)
+# ============================================================
+# التفتيشات - مؤقتًا
+# ============================================================
+
+@router.get(
+    "/maintenance/inspections",
+    response_class=HTMLResponse,
+)
 def maintenance_inspections_placeholder(
     request: Request,
     current_user: User = Depends(get_current_user),
 ):
     return templates.TemplateResponse(
         "maintenance_placeholder.html",
-        {"request": request, "user": current_user, "section_title": "التفتيشات الدورية"},
+        {
+            "request": request,
+            "user": current_user,
+            "section_title": "التفتيشات الدورية",
+        },
     )
 
 
-@router.get("/maintenance/periodic", response_class=HTMLResponse)
+# ============================================================
+# الصيانة الدورية
+# ============================================================
+
+@router.get(
+    "/maintenance/periodic",
+    response_class=HTMLResponse,
+)
 def maintenance_periodic_page(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     open_records = services.list_open_records(db)
+
     equipment_list = equipment_services.list_equipment(db)
+
     return templates.TemplateResponse(
         "maintenance_list.html",
         {
@@ -98,18 +169,36 @@ def maintenance_periodic_page(
     )
 
 
-@router.get("/maintenance/{equipment_id}/due", response_class=HTMLResponse)
+# ============================================================
+# الصيانات المستحقة لعتاد معين
+# ============================================================
+
+@router.get(
+    "/maintenance/{equipment_id}/due",
+    response_class=HTMLResponse,
+)
 def maintenance_due_for_equipment(
     request: Request,
     equipment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    equipment = equipment_services.get_equipment(db, equipment_id)
-    if not equipment:
-        raise HTTPException(status_code=404, detail="العتاد غير موجود")
+    equipment = equipment_services.get_equipment(
+        db,
+        equipment_id,
+    )
 
-    due_schedules = services.get_due_schedules_for_equipment(db, equipment_id)
+    if not equipment:
+        raise HTTPException(
+            status_code=404,
+            detail="العتاد غير موجود",
+        )
+
+    due_schedules = services.get_due_schedules_for_equipment(
+        db,
+        equipment_id,
+    )
+
     return templates.TemplateResponse(
         "maintenance_due.html",
         {
@@ -121,62 +210,168 @@ def maintenance_due_for_equipment(
     )
 
 
-@router.post("/maintenance/create")
+# ============================================================
+# تسجيل تنفيذ صيانة دورية
+# ============================================================
+
+@router.post(
+    "/maintenance/create"
+)
 def maintenance_create_form(
     request: Request,
     equipment_id: int = Form(...),
     reported_date: date = Form(...),
+
+    # العملية الدورية التي اختارها المستخدم
     maintenance_schedule_id: Optional[str] = Form(None),
+
     description: str = Form(""),
+
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
     try:
+
         services.create_maintenance_record(
             db,
             equipment_id=equipment_id,
             reported_date=reported_date,
-            maintenance_schedule_id=int(maintenance_schedule_id) if maintenance_schedule_id else None,
-            description=description or None,
+            maintenance_schedule_id=(
+                int(maintenance_schedule_id)
+                if maintenance_schedule_id
+                else None
+            ),
+            description=(
+                description
+                if description
+                else None
+            ),
         )
-    except ValueError:
-        pass
-    return RedirectResponse(url="/maintenance/periodic", status_code=status.HTTP_302_FOUND)
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return RedirectResponse(
+        url="/maintenance/periodic",
+        status_code=status.HTTP_302_FOUND,
+    )
 
 
-@router.post("/maintenance/{record_id}/close")
+# ============================================================
+# إغلاق عملية الصيانة
+# ============================================================
+
+@router.post(
+    "/maintenance/{record_id}/close"
+)
 def maintenance_close_form(
     record_id: int,
+
     resolved_date: date = Form(...),
+
     meter_reading: str = Form(""),
+
     resolution_notes: str = Form(""),
+
     performed_by: str = Form(""),
+
     location: str = Form(""),
+
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
-    record = services.complete_maintenance_record(
-        db,
-        record_id,
-        resolved_date=resolved_date,
-        meter_reading=Decimal(meter_reading) if meter_reading else None,
-        resolution_notes=resolution_notes or None,
-        performed_by=performed_by or None,
-        location=location or None,
-    )
+    try:
+
+        record = services.complete_maintenance_record(
+            db,
+            record_id,
+
+            resolved_date=resolved_date,
+
+            meter_reading=(
+                Decimal(meter_reading)
+                if meter_reading
+                else None
+            ),
+
+            resolution_notes=(
+                resolution_notes
+                if resolution_notes
+                else None
+            ),
+
+            performed_by=(
+                performed_by
+                if performed_by
+                else None
+            ),
+
+            location=(
+                location
+                if location
+                else None
+            ),
+        )
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
     if not record:
-        raise HTTPException(status_code=404, detail="سجل الصيانة غير موجود")
-    return RedirectResponse(url="/maintenance/periodic", status_code=status.HTTP_302_FOUND)
+        raise HTTPException(
+            status_code=404,
+            detail="سجل الصيانة غير موجود",
+        )
+
+    return RedirectResponse(
+        url="/maintenance/periodic",
+        status_code=status.HTTP_302_FOUND,
+    )
 
 
-@router.get("/maintenance/settings", response_class=HTMLResponse)
+# ============================================================
+# إعدادات الصيانة
+# ============================================================
+
+@router.get(
+    "/maintenance/settings",
+    response_class=HTMLResponse,
+)
 def maintenance_settings_page(
     request: Request,
+
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(Role.ADMIN)),
+
+    current_user: User = Depends(
+        require_role(Role.ADMIN)
+    ),
 ):
-    maintenance_types = services.list_maintenance_types(db)
-    equipment_types = type_services.list_types(db)
+    # ما زلنا نرسل maintenance_types للصفحة
+    # للتوافق مع النسخة الحالية.
+    #
+    # لكن إنشاء عملية صيانة جديدة لا يحتاج
+    # maintenance_type_id.
+    maintenance_types = services.list_maintenance_types(
+        db
+    )
+
+    equipment_types = type_services.list_types(
+        db
+    )
+
     return templates.TemplateResponse(
         "maintenance_settings.html",
         {
@@ -188,59 +383,179 @@ def maintenance_settings_page(
     )
 
 
-@router.post("/maintenance/types/create")
+# ============================================================
+# إضافة نوع صيانة قديم
+# ============================================================
+
+@router.post(
+    "/maintenance/types/create"
+)
 def create_maintenance_type_form(
     name: str = Form(...),
+
     description: str = Form(""),
+
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(Role.ADMIN)),
+
+    current_user: User = Depends(
+        require_role(Role.ADMIN)
+    ),
 ):
     try:
-        services.create_maintenance_type(db, name=name, description=description or None)
-    except ValueError:
-        pass
-    return RedirectResponse(url="/maintenance/settings", status_code=status.HTTP_302_FOUND)
 
-
-@router.post("/maintenance/schedules/create")
-def create_maintenance_schedule_form(
-    name: str = Form(...),
-    equipment_type_id: int = Form(...),
-    maintenance_type_id: int = Form(...),
-    interval_km: str = Form(""),
-    interval_hours: str = Form(""),
-    interval_days: str = Form(""),
-    makes_equipment_unavailable: bool = Form(False),
-    notify_offset_days: str = Form("0"),
-    actions_required: str = Form(""),
-    description: str = Form(""),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(Role.ADMIN)),
-):
-    try:
-        services.create_maintenance_schedule(
+        services.create_maintenance_type(
             db,
             name=name,
-            equipment_type_id=equipment_type_id,
-            maintenance_type_id=maintenance_type_id,
-            interval_km=int(interval_km) if interval_km else None,
-            interval_hours=int(interval_hours) if interval_hours else None,
-            interval_days=int(interval_days) if interval_days else None,
-            makes_equipment_unavailable=makes_equipment_unavailable,
-            notify_offset_days=int(notify_offset_days) if notify_offset_days else 0,
-            actions_required=actions_required or None,
-            description=description or None,
+            description=(
+                description
+                if description
+                else None
+            ),
         )
-    except ValueError:
-        pass
-    return RedirectResponse(url="/maintenance/settings", status_code=status.HTTP_302_FOUND)
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return RedirectResponse(
+        url="/maintenance/settings",
+        status_code=status.HTTP_302_FOUND,
+    )
 
 
-@router.get("/api/maintenance/equipment/{equipment_id}/due")
+# ============================================================
+# إضافة عملية صيانة دورية
+#
+# مهم:
+# لا يوجد maintenance_type_id هنا.
+# ============================================================
+
+@router.post(
+    "/maintenance/schedules/create"
+)
+def create_maintenance_schedule_form(
+    name: str = Form(...),
+
+    equipment_type_id: int = Form(...),
+
+    interval_km: str = Form(""),
+
+    interval_hours: str = Form(""),
+
+    interval_days: str = Form(""),
+
+    makes_equipment_unavailable: bool = Form(
+        False
+    ),
+
+    notify_offset_days: str = Form("0"),
+
+    actions_required: str = Form(""),
+
+    description: str = Form(""),
+
+    db: Session = Depends(get_db),
+
+    current_user: User = Depends(
+        require_role(Role.ADMIN)
+    ),
+):
+    try:
+
+        services.create_maintenance_schedule(
+
+            db,
+
+            name=name,
+
+            equipment_type_id=equipment_type_id,
+
+            # لم يعد هناك maintenance_type_id
+            maintenance_type_id=None,
+
+            interval_km=(
+                int(interval_km)
+                if interval_km
+                else None
+            ),
+
+            interval_hours=(
+                int(interval_hours)
+                if interval_hours
+                else None
+            ),
+
+            interval_days=(
+                int(interval_days)
+                if interval_days
+                else None
+            ),
+
+            makes_equipment_unavailable=(
+                makes_equipment_unavailable
+            ),
+
+            notify_offset_days=(
+                int(notify_offset_days)
+                if notify_offset_days
+                else 0
+            ),
+
+            actions_required=(
+                actions_required
+                if actions_required
+                else None
+            ),
+
+            description=(
+                description
+                if description
+                else None
+            ),
+        )
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return RedirectResponse(
+        url="/maintenance/settings",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+# ============================================================
+# API: الصيانات المستحقة
+# ============================================================
+
+@router.get(
+    "/api/maintenance/equipment/{equipment_id}/due"
+)
 def api_due_schedules(
     equipment_id: int,
+
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
-    schedules = services.get_due_schedules_for_equipment(db, equipment_id)
-    return [{"id": s.id, "name": s.name, "internal_code": s.internal_code} for s in schedules]
+    schedules = services.get_due_schedules_for_equipment(
+        db,
+        equipment_id,
+    )
+
+    return [
+        {
+            "id": schedule.id,
+            "name": schedule.name,
+            "internal_code": schedule.internal_code,
+        }
+        for schedule in schedules
+    ]
