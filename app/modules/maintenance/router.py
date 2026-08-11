@@ -360,4 +360,181 @@ def maintenance_settings_page(
     )
 
     return templates.TemplateResponse(
-        "maintenance
+        "maintenance_settings.html",
+        {
+            "request": request,
+
+            "maintenance_types": maintenance_types,
+
+            "equipment_types": equipment_types,
+
+            "user": current_user,
+        },
+    )
+
+
+# =========================================================
+# إضافة نوع صيانة
+# =========================================================
+
+@router.post(
+    "/maintenance/types/create"
+)
+def create_maintenance_type_form(
+    name: str = Form(...),
+
+    description: str = Form(""),
+
+    db: Session = Depends(get_db),
+
+    current_user: User = Depends(
+        require_role(Role.ADMIN)
+    ),
+):
+    try:
+
+        services.create_maintenance_type(
+            db,
+
+            name=name,
+
+            description=(
+                description
+                if description
+                else None
+            ),
+        )
+
+    except ValueError:
+        pass
+
+    return RedirectResponse(
+        url="/maintenance/settings",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+# =========================================================
+# إضافة خطة صيانة دورية
+# =========================================================
+
+@router.post(
+    "/maintenance/schedules/create"
+)
+def create_maintenance_schedule_form(
+    name: str = Form(...),
+
+    equipment_type_id: int = Form(...),
+
+    maintenance_type_id: int = Form(...),
+
+    interval_km: str = Form(""),
+
+    interval_hours: str = Form(""),
+
+    interval_days: str = Form(""),
+
+    makes_equipment_unavailable: bool = Form(False),
+
+    notify_offset_days: str = Form("0"),
+
+    actions_required: str = Form(""),
+
+    description: str = Form(""),
+
+    db: Session = Depends(get_db),
+
+    current_user: User = Depends(
+        require_role(Role.ADMIN)
+    ),
+):
+    try:
+
+        services.create_maintenance_schedule(
+            db,
+
+            name=name,
+
+            equipment_type_id=equipment_type_id,
+
+            maintenance_type_id=maintenance_type_id,
+
+            interval_km=(
+                int(interval_km)
+                if interval_km
+                else None
+            ),
+
+            interval_hours=(
+                int(interval_hours)
+                if interval_hours
+                else None
+            ),
+
+            interval_days=(
+                int(interval_days)
+                if interval_days
+                else None
+            ),
+
+            makes_equipment_unavailable=(
+                makes_equipment_unavailable
+            ),
+
+            notify_offset_days=(
+                int(notify_offset_days)
+                if notify_offset_days
+                else 0
+            ),
+
+            actions_required=(
+                actions_required
+                if actions_required
+                else None
+            ),
+
+            description=(
+                description
+                if description
+                else None
+            ),
+        )
+
+    except ValueError:
+        pass
+
+    return RedirectResponse(
+        url="/maintenance/settings",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+# =========================================================
+# API - الصيانات المستحقة
+# =========================================================
+
+@router.get(
+    "/api/maintenance/equipment/{equipment_id}/due"
+)
+def api_due_schedules(
+    equipment_id: int,
+
+    db: Session = Depends(get_db),
+
+    current_user: User = Depends(
+        get_current_user
+    ),
+):
+    schedules = services.get_due_schedules_for_equipment(
+        db,
+        equipment_id,
+    )
+
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "internal_code": s.internal_code,
+        }
+        for s in schedules
+    ]
