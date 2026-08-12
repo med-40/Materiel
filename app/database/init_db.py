@@ -6,7 +6,7 @@ from app.modules.equipment_types import models as equipment_types_models  # noqa
 from app.modules.equipment import models as equipment_models            # noqa: F401
 from app.modules.maintenance import models as maintenance_models            # noqa: F401
 
-
+from app.modules.meter_readings import models as meter_readings_models  # noqa: F401
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
