@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}قراءات العدادات{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h2>قراءات العدادات</h2>
+        <p class="page-hint">
+            {{ item.equipment_type.name if item.equipment_type else "-" }}
+            -
+            {{ item.equipment_model.name if item.equipment_model else "-" }}
+        </p>
+    </div>
+
+    <div>
+        <a href="/equipment/{{ item.id }}" class="btn-secondary">
+            ← ملف العتاد
+        </a>
+        <a href="/equipment" class="btn-secondary">
+            قائمة العتاد
+        </a>
+    </div>
+</div>
+
+
+<div class="card">
+    <h3>القراءة الحالية</h3>
+
+    <div class="grid-form">
+
+        <div class="field">
+            <label>آخر قراءة كيلومترات</label>
+            <div class="form-value">
+                {{ item.current_odometer or 0 }} كم
+            </div>
+        </div>
+
+        <div class="field">
+            <label>آخر قراءة ساعات</label>
+            <div class="form-value">
+                {{ item.current_hours or 0 }} س
+            </div>
+        </div>
+
+    </div>
+</div>
+
+
+<div class="card">
+    <h3>إضافة قراءة جديدة</h3>
+
+    <form method="post"
+          action="/equipment/{{ item.id }}/meters/create"
+          class="grid-form">
+
+        <div class="field">
+            <label>تاريخ القراءة *</label>
+            <input type="date"
+                   name="reading_date"
+                   required>
+        </div>
+
+        <div class="field">
+            <label>قراءة الكيلومترات</label>
+            <input type="number"
+                   name="odometer"
+                   step="0.1"
+                   min="0"
+                   placeholder="مثال: 12500.5">
+        </div>
+
+        <div class="field">
+            <label>قراءة الساعات</label>
+            <input type="number"
+                   name="hours"
+                   step="0.1"
+                   min="0"
+                   placeholder="مثال: 1250.5">
+        </div>
+
+        <div class="field">
+            <label>ملاحظات</label>
+            <input type="text"
+                   name="notes"
+                   maxlength="300">
+        </div>
+
+        <div class="field field-submit">
+            <button type="submit" class="btn-primary">
+                حفظ القراءة
+            </button>
+        </div>
+
+    </form>
+</div>
+
+
+<div class="card">
+    <h3>سجل القراءات</h3>
+
+    <div class="table-wrap">
+        <table class="data-table modern-table">
+
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>التاريخ</th>
+                    <th>الكيلومترات</th>
+                    <th>الساعات</th>
+                    <th>المصدر</th>
+                    <th>ملاحظات</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% for reading in readings %}
+
+                <tr>
+                    <td>{{ loop.index }}</td>
+
+                    <td>
+                        {{ reading.reading_date.strftime("%Y-%m-%d") if reading.reading_date else "-" }}
+                    </td>
+
+                    <td>
+                        {% if reading.odometer is not none %}
+                            {{ reading.odometer }} كم
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if reading.hours is not none %}
+                            {{ reading.hours }} س
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {{ "يدوي" if reading.source == "manual" else reading.source }}
+                    </td>
+
+                    <td>
+                        {{ reading.notes or "-" }}
+                    </td>
+                </tr>
+
+                {% else %}
+
+                <tr>
+                    <td colspan="6" class="empty">
+                        لا توجد قراءات مسجلة لهذا العتاد حتى الآن.
+                    </td>
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+    </div>
+</div>
+
+{% endblock %}

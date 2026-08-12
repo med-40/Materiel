@@ -9,62 +9,50 @@
 
 <div class="card" id="add-form-card" style="display:none;">
     <h3>إضافة عتاد جديد</h3>
+
     <form method="post" action="/equipment/create" class="grid-form">
+
         <div class="field">
             <label>الوثيقة</label>
             <input type="text" name="acquisition_document">
         </div>
+
         <div class="field">
             <label>نوع العتاد *</label>
-            <select name="equipment_type_id" id="type-select" required onchange="onTypeChange()">
+            <select name="equipment_type_id"
+                    id="type-select"
+                    required
+                    onchange="onTypeChange()">
                 <option value="">اختر النوع...</option>
                 {% for t in types %}
-                <option value="{{ t.id }}" data-unit="{{ t.measurement_unit }}">{{ t.name }}</option>
+                <option value="{{ t.id }}">
+                    {{ t.name }}
+                </option>
                 {% endfor %}
             </select>
         </div>
+
         <div class="field">
             <label>الطراز</label>
             <select name="equipment_model_id" id="model-select">
                 <option value="">اختر النوع أولاً</option>
             </select>
         </div>
+
         <div class="field">
             <label>رقم التسجيل</label>
             <input type="text" name="registration_number">
         </div>
+
         <div class="field">
             <label>رقم الهيكل</label>
             <input type="text" name="vin">
         </div>
-        <div class="field" id="odometer-field">
-            <label>عداد الكم</label>
-            <input type="number" step="0.1" name="current_odometer" value="0">
-        </div>
-        <div class="field" id="hour-meter-field">
-            <label>عداد الساعات</label>
-            <input type="number" step="0.1" name="current_hours" value="0">
-        </div>
-        <div class="field">
-            <label>الحالة الفنية</label>
-            <select name="technical_condition">
-                <option value="ready">جاهز</option>
-                <option value="broken">عاطل</option>
-            </select>
-        </div>
-        <div class="field">
-            <label>الوضعية</label>
-            <select name="operational_status">
-                <option value="available">متاح</option>
-                <option value="in_mission">في مهمة</option>
-                <option value="in_maintenance">في الصيانة</option>
-                <option value="in_external_workshop">في ورشة خارجية</option>
-                <option value="unavailable">غير متاح</option>
-            </select>
-        </div>
+
         <div class="field field-submit">
             <button type="submit">حفظ العتاد</button>
         </div>
+
     </form>
 </div>
 
@@ -75,7 +63,7 @@
 {% endif %}
 
 <div class="toolbar">
-    <input type="text" id="search-input" class="search-box" placeholder="بحث بالرقم، رقم التسجيل، رقم الهيكل...">
+    <input type="text" id="search-input" class="search-box" placeholder="بحث برقم التسجيل، رقم الهيكل...">
 
     <select id="filter-type">
         <option value="">كل الأنواع</option>
@@ -117,7 +105,6 @@
     <thead>
         <tr>
             <th>#</th>
-            <th>الرقم</th>
             <th class="col-doc">الوثيقة</th>
             <th>النوع</th>
             <th class="col-model">الطراز</th>
@@ -131,13 +118,12 @@
     </thead>
     <tbody>
         {% for item in items %}
-        <tr class="data-row"
+        <tr class="data-row" onclick="openEquipment({{ item.id }})" style="cursor:pointer;"
             data-type="{{ item.equipment_type.name if item.equipment_type else '' }}"
             data-status="{% if item.operational_status == 'available' %}متاح{% elif item.operational_status == 'in_mission' %}في مهمة{% elif item.operational_status == 'in_maintenance' %}في الصيانة{% elif item.operational_status == 'in_external_workshop' %}في ورشة خارجية{% else %}غير متاح{% endif %}"
             data-condition="{{ 'جاهز' if item.technical_condition == 'ready' else 'عاطل' }}"
-            data-search="{{ item.asset_code }} {{ item.registration_number or '' }} {{ item.vin or '' }}">
-            <td>{{ item.id }}</td>
-            <td class="cell-strong"><a href="/equipment/{{ item.id }}">{{ item.asset_code }}</a></td>
+            data-search="{{ item.registration_number or '' }} {{ item.vin or '' }}">
+            <td class="row-number">{{ loop.index }}</td>
             <td class="col-doc">{{ item.acquisition_document or "-" }}</td>
             <td>{{ item.equipment_type.name if item.equipment_type else "-" }}</td>
             <td class="col-model">{{ item.equipment_model.name if item.equipment_model else "-" }}</td>
@@ -162,7 +148,7 @@
             </td>
         </tr>
         {% else %}
-        <tr><td colspan="11" class="empty">لا يوجد عتاد مسجّل بعد</td></tr>
+        <tr><td colspan="10" class="empty">لا يوجد عتاد مسجّل بعد</td></tr>
         {% endfor %}
     </tbody>
 </table>
@@ -170,6 +156,11 @@
 <p class="results-count" id="results-count"></p>
 
 <script>
+function openEquipment(id) {
+    window.location.href = '/equipment/' + id;
+}
+
+
 function toggleAddForm() {
     const card = document.getElementById('add-form-card');
     card.style.display = card.style.display === 'none' ? 'block' : 'none';

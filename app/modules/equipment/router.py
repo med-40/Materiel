@@ -11,6 +11,7 @@ from app.modules.equipment import services
 from app.modules.equipment.schemas import EquipmentCreate, EquipmentOut, EquipmentUpdate
 from app.modules.equipment_types import services as type_services
 from app.modules.users.models import User
+from app.modules.meter_readings import services as meter_services
 
 router = APIRouter()
 templates = get_module_templates("app/modules/equipment/templates")
@@ -98,6 +99,83 @@ def equipment_delete_form(
     if item:
         services.delete_equipment(db, item)
     return RedirectResponse(url="/equipment", status_code=status.HTTP_302_FOUND)
+
+
+
+@router.get("/equipment/{equipment_id}/meters", response_class=HTMLResponse)
+def equipment_meters_page(
+    equipment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = services.get_equipment(db, equipment_id)
+
+    if not item:
+        raise HTTPException(status_code=404, detail="العتاد غير موجود")
+
+    readings = meter_services.list_readings(db, equipment_id)
+
+    return templates.TemplateResponse(
+        "equipment_meters.html",
+        {
+            "request": request,
+            "item": item,
+            "readings": readings,
+            "user": current_user,
+        },
+    )
+
+
+@router.post("/equipment/{equipment_id}/meters/create")
+def equipment_meter_create(
+    equipment_id: int,
+    reading_date: str = Form(...),
+    odometer: str = Form(""),
+    hours: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = services.get_equipment(db, equipment_id)
+
+    if not item:
+        raise HTTPException(status_code=404, detail="العتاد غير موجود")
+
+    from datetime import datetime
+    from decimal import Decimal
+
+    odometer_value = Decimal(odometer) if odometer.strip() else None
+    hours_value = Decimal(hours) if hours.strip() else None
+
+    if odometer_value is None and hours_value is None:
+        raise HTTPException(
+            status_code=400,
+            detail="يجب إدخال قراءة الكيلومترات أو قراءة الساعات"
+        )
+
+    reading = meter_services.create_reading(
+        db,
+        equipment_id=equipment_id,
+        odometer=odometer_value,
+        hours=hours_value,
+    )
+
+    reading.reading_date = datetime.strptime(reading_date, "%Y-%m-%d")
+    reading.notes = notes or None
+
+    if odometer_value is not None:
+        item.current_odometer = odometer_value
+
+    if hours_value is not None:
+        item.current_hours = hours_value
+
+    db.commit()
+
+    return RedirectResponse(
+        url=f"/equipment/{equipment_id}/meters",
+        status_code=status.HTTP_302_FOUND,
+    )
 
 
 @router.get("/api/equipment", response_model=list[EquipmentOut])

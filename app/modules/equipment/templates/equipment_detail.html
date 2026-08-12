@@ -1,5 +1,19 @@
 {% extends "base.html" %}
-{% block title %}تفاصيل العتاد{% endblock %}
+{% block title %}تفاصيل العتاد
+<div style="margin-top:20px; display:flex; gap:10px; align-items:center;">
+    <a href="/equipment" class="btn-secondary">العودة إلى قائمة العتاد</a>
+
+    <form method="post"
+          action="/equipment/{{ item.id }}/delete"
+          onsubmit="return confirm('هل أنت متأكد من حذف هذا العتاد؟ لا يمكن التراجع عن هذا الإجراء.');">
+        <button type="submit"
+                class="btn-danger">
+            حذف العتاد
+        </button>
+    </form>
+</div>
+
+{% endblock %}
 
 {% block content %}
 
@@ -84,6 +98,20 @@
 
     </div>
 
+</div>
+
+
+<div style="margin-top:20px; display:flex; gap:10px; align-items:center;">
+    <a href="/equipment" class="btn-secondary">العودة إلى قائمة العتاد</a>
+
+    <form method="post"
+          action="/equipment/{{ item.id }}/delete"
+          onsubmit="return confirm('هل أنت متأكد من حذف هذا العتاد؟ لا يمكن التراجع عن هذا الإجراء.');">
+        <button type="submit"
+                class="btn-danger">
+            حذف العتاد
+        </button>
+    </form>
 </div>
 
 {% endblock %}

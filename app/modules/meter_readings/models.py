@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
 from datetime import datetime
+
+from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String
+from sqlalchemy.orm import relationship
 
 from app.database.base import Base
 
@@ -12,14 +13,21 @@ class MeterReading(Base):
 
     equipment_id = Column(
         Integer,
-        ForeignKey("equipment.id"),
+        ForeignKey("equipment.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+
+    reading_date = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
     )
 
     odometer = Column(Numeric(10, 1), nullable=True)
     hours = Column(Numeric(10, 1), nullable=True)
 
-    reading_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    source = Column(String(50), nullable=False, default="manual")
+    notes = Column(String(300), nullable=True)
 
     equipment = relationship("Equipment")

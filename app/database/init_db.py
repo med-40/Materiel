@@ -1,10 +1,10 @@
 from app.database.base import Base
 from app.database.session import engine
+from app.modules.meter_readings import models as meter_models  # noqa: F401
 
 from app.modules.users import models as users_models                    # noqa: F401
 from app.modules.equipment_types import models as equipment_types_models  # noqa: F401
 from app.modules.equipment import models as equipment_models            # noqa: F401
-from app.modules.maintenance import models as maintenance_models            # noqa: F401
 
 from app.modules.meter_readings import models as meter_readings_models  # noqa: F401
 from app.modules.odometer_readings import models as odometer_readings_models  # noqa: F401
@@ -34,3 +34,6 @@ def create_default_admin() -> None:
             print("[init_db] تم إنشاء مستخدم افتراضي: admin / Admin@123")
     finally:
         db.close()
+
+from app.modules.odometer_readings import models as odometer_readings_models  # noqa: F401
+from app.modules.hour_meter_readings import models as hour_meter_readings_models  # noqa: F401
