@@ -49,55 +49,6 @@
 
 
 <div class="card">
-    <h3>إضافة قراءة جديدة</h3>
-
-    <form method="post"
-          action="/equipment/{{ item.id }}/meters/create"
-          class="grid-form">
-
-        <div class="field">
-            <label>تاريخ القراءة *</label>
-            <input type="date"
-                   name="reading_date"
-                   required>
-        </div>
-
-        <div class="field">
-            <label>قراءة الكيلومترات</label>
-            <input type="number"
-                   name="odometer"
-                   step="0.1"
-                   min="0"
-                   placeholder="مثال: 12500.5">
-        </div>
-
-        <div class="field">
-            <label>قراءة الساعات</label>
-            <input type="number"
-                   name="hours"
-                   step="0.1"
-                   min="0"
-                   placeholder="مثال: 1250.5">
-        </div>
-
-        <div class="field">
-            <label>ملاحظات</label>
-            <input type="text"
-                   name="notes"
-                   maxlength="300">
-        </div>
-
-        <div class="field field-submit">
-            <button type="submit" class="btn-primary">
-                حفظ القراءة
-            </button>
-        </div>
-
-    </form>
-</div>
-
-
-<div class="card">
     <h3>سجل القراءات</h3>
 
     <div class="table-wrap">
