@@ -101,7 +101,6 @@ def equipment_delete_form(
     return RedirectResponse(url="/equipment", status_code=status.HTTP_302_FOUND)
 
 
-
 @router.get("/equipment/{equipment_id}/meters", response_class=HTMLResponse)
 def equipment_meters_page(
     equipment_id: int,
@@ -143,34 +142,32 @@ def equipment_meter_create(
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
 
     from datetime import datetime
-    from decimal import Decimal
+    from decimal import Decimal, InvalidOperation
 
-    odometer_value = Decimal(odometer) if odometer.strip() else None
-    hours_value = Decimal(hours) if hours.strip() else None
+    try:
+        date_value = datetime.strptime(reading_date, "%Y-%m-%d")
+        odometer_value = Decimal(odometer) if odometer.strip() else None
+        hours_value = Decimal(hours) if hours.strip() else None
+    except (ValueError, InvalidOperation):
+        raise HTTPException(status_code=400, detail="تاريخ أو قيمة عداد غير صحيحة")
 
     if odometer_value is None and hours_value is None:
         raise HTTPException(
             status_code=400,
-            detail="يجب إدخال قراءة الكيلومترات أو قراءة الساعات"
+            detail="يجب إدخال قراءة الكيلومترات أو قراءة الساعات",
         )
 
-    reading = meter_services.create_reading(
-        db,
-        equipment_id=equipment_id,
-        odometer=odometer_value,
-        hours=hours_value,
-    )
-
-    reading.reading_date = datetime.strptime(reading_date, "%Y-%m-%d")
-    reading.notes = notes or None
-
-    if odometer_value is not None:
-        item.current_odometer = odometer_value
-
-    if hours_value is not None:
-        item.current_hours = hours_value
-
-    db.commit()
+    try:
+        meter_services.create_reading(
+            db,
+            equipment_id=equipment_id,
+            odometer=odometer_value,
+            hours=hours_value,
+            reading_date=date_value,
+            notes=notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     return RedirectResponse(
         url=f"/equipment/{equipment_id}/meters",
