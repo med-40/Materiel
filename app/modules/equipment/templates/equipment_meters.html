@@ -4,6 +4,45 @@
 
 {% block content %}
 
+<style>
+    .meter-status {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .meter-status.success {
+        color: #166534;
+        background: #dcfce7;
+    }
+
+    .meter-status.warning {
+        color: #92400e;
+        background: #fef3c7;
+    }
+
+    .meter-status.danger {
+        color: #991b1b;
+        background: #fee2e2;
+    }
+
+    .meter-status.reference {
+        color: #1d4ed8;
+        background: #dbeafe;
+    }
+
+    .meter-status.empty {
+        color: #6b7280;
+        background: #f3f4f6;
+    }
+</style>
+
 <div class="page-header">
     <div>
         <h2>قراءات العدادات</h2>
@@ -60,7 +99,8 @@
                     <th>التاريخ</th>
                     <th>الكيلومترات</th>
                     <th>الساعات</th>
-                    <th>المصدر</th>
+                    <th>الفارق</th>
+                    <th>حالة القراءة</th>
                     <th>ملاحظات</th>
                 </tr>
             </thead>
@@ -73,38 +113,49 @@
                     <td>{{ loop.index }}</td>
 
                     <td>
-                        {{ reading.reading_date.strftime("%Y-%m-%d") if reading.reading_date else "-" }}
+                        {{ reading.date }}
                     </td>
 
                     <td>
-                        {% if reading.odometer is not none %}
+                        {% if reading.odometer != "—" %}
                             {{ reading.odometer }} كم
                         {% else %}
-                            -
+                            —
                         {% endif %}
                     </td>
 
                     <td>
-                        {% if reading.hours is not none %}
+                        {% if reading.hours != "—" %}
                             {{ reading.hours }} س
                         {% else %}
-                            -
+                            —
                         {% endif %}
                     </td>
 
                     <td>
-                        {{ "يدوي" if reading.source == "manual" else reading.source }}
+                        {% if reading.difference != "—" %}
+                            {{ reading.difference }} {{ reading.unit }}
+                        {% else %}
+                            —
+                        {% endif %}
                     </td>
 
                     <td>
-                        {{ reading.notes or "-" }}
+                        <span class="meter-status {{ reading.status_class }}">
+                            {% if reading.status_class == "success" %}●{% elif reading.status_class == "warning" %}▲{% elif reading.status_class == "danger" %}↓{% elif reading.status_class == "reference" %}●{% else %}●{% endif %}
+                            {{ reading.status }}
+                        </span>
+                    </td>
+
+                    <td>
+                        {{ reading.note }}
                     </td>
                 </tr>
 
                 {% else %}
 
                 <tr>
-                    <td colspan="6" class="empty">
+                    <td colspan="7" class="empty">
                         لا توجد قراءات مسجلة لهذا العتاد حتى الآن.
                     </td>
                 </tr>
