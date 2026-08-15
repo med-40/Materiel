@@ -108,12 +108,10 @@ def equipment_meters_page(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    item = services.get_equipment(db, equipment_id)
+    item, readings = meter_services.history_rows(db, equipment_id)
 
     if not item:
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
-
-    readings = meter_services.list_readings(db, equipment_id)
 
     return templates.TemplateResponse(
         "equipment_meters.html",
