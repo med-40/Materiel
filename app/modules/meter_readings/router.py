@@ -1,7 +1,6 @@
-from fastapi.templating import Jinja2Templates
-from pathlib import Path
-
 from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+
 from app.core.templating import get_module_templates
 
 
@@ -10,13 +9,19 @@ router = APIRouter(
     tags=["Meter Readings"],
 )
 
-templates = Jinja2Templates(
-    directory=str(Path(__file__).parent / "templates")
+
+# نستخدم محرك القوالب الموحد للمشروع
+# حتى تستطيع الصفحة استعمال base.html الموجود في القوالب العامة.
+templates = get_module_templates(
+    "app/modules/meter_readings/templates"
 )
 
 
-# بيانات تجريبية فقط في هذه المرحلة
-# لا يوجد اتصال بقاعدة البيانات
+# ---------------------------------------------------------
+# بيانات تجريبية مؤقتة
+# ---------------------------------------------------------
+# هذه البيانات مؤقتة فقط لاختبار واجهة الوحدة.
+# لن نربطها بقاعدة البيانات الآن حتى نتأكد أن الصفحة تعمل.
 DEMO_READINGS = [
     {
         "number": 1,
@@ -112,8 +117,27 @@ DEMO_READINGS = [
 ]
 
 
-@router.get("/")
+# ---------------------------------------------------------
+# صفحة قراءات العدادات
+# ---------------------------------------------------------
+@router.get("", response_class=HTMLResponse)
 async def meter_readings_page(request: Request):
+    return templates.TemplateResponse(
+        "meter_readings.html",
+        {
+            "request": request,
+            "readings": DEMO_READINGS,
+            "last_update": "14/08/2026",
+        },
+    )
+
+
+# ---------------------------------------------------------
+# دعم الرابط الذي يحتوي على /
+# /meter-readings/
+# ---------------------------------------------------------
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def meter_readings_page_slash(request: Request):
     return templates.TemplateResponse(
         "meter_readings.html",
         {
