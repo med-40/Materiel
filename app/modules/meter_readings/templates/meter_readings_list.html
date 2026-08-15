@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}قراءات العدادات{% endblock %}
+
+{% block content %}
+
+<style>
+.meter-page {
+    direction: rtl;
+}
+
+.meter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.meter-header h2 {
+    margin: 0;
+}
+
+.meter-subtitle {
+    color: #64748b;
+    font-size: 13px;
+    margin-top: 5px;
+}
+
+.meter-card {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, .07);
+    padding: 14px;
+}
+
+.meter-table-wrap {
+    width: 100%;
+    overflow: auto;
+    max-height: calc(100vh - 210px);
+    border: 1px solid #dbe3ec;
+    border-radius: 8px;
+}
+
+.meter-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: max-content;
+    min-width: 100%;
+    font-size: 13px;
+    background: #fff;
+}
+
+.meter-table th,
+.meter-table td {
+    padding: 10px 12px;
+    border-left: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.meter-table th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #173b63;
+    color: #fff;
+    font-weight: 600;
+}
+
+.meter-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+/* تجميد الأعمدة من اليمين حتى رقم التسجيل */
+.sticky-reg {
+    position: sticky;
+    right: 0;
+    z-index: 5;
+    min-width: 125px;
+    background: #fff;
+}
+
+.sticky-model {
+    position: sticky;
+    right: 125px;
+    z-index: 5;
+    min-width: 145px;
+    background: #fff;
+}
+
+.sticky-type {
+    position: sticky;
+    right: 270px;
+    z-index: 5;
+    min-width: 125px;
+    background: #fff;
+}
+
+.sticky-number {
+    position: sticky;
+    right: 395px;
+    z-index: 5;
+    min-width: 55px;
+    background: #fff;
+}
+
+.meter-table th.sticky-reg,
+.meter-table th.sticky-model,
+.meter-table th.sticky-type,
+.meter-table th.sticky-number {
+    z-index: 20;
+    background: #173b63;
+}
+
+.meter-table tbody tr:hover .sticky-reg,
+.meter-table tbody tr:hover .sticky-model,
+.meter-table tbody tr:hover .sticky-type,
+.meter-table tbody tr:hover .sticky-number {
+    background: #f8fafc;
+}
+
+.status {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-reference {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.status-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.status-empty {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.reference-value {
+    color: #64748b;
+}
+
+.positive {
+    color: #15803d;
+    font-weight: 600;
+}
+
+.negative {
+    color: #b91c1c;
+    font-weight: 600;
+}
+</style>
+
+<div class="meter-page">
+
+    <div class="meter-header">
+        <div>
+            <h2>قراءات العدادات لجميع العتاد</h2>
+            <div class="meter-subtitle">
+                عرض آخر قراءة مسجلة لكل عتاد — المرحلة الأولى
+            </div>
+        </div>
+    </div>
+
+    <div class="meter-card">
+
+        <div class="meter-table-wrap">
+
+            <table class="meter-table">
+
+                <thead>
+                    <tr>
+                        <th class="sticky-number">#</th>
+                        <th class="sticky-type">نوع العتاد</th>
+                        <th class="sticky-model">الطراز</th>
+                        <th class="sticky-reg">رقم التسجيل</th>
+
+                        <th>وحدة العداد</th>
+                        <th>آخر تاريخ قراءة</th>
+                        <th>القراءة</th>
+                        <th>الفارق عن السابق</th>
+                        <th>الملاحظة</th>
+                        <th>حالة القراءة</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for row in rows %}
+
+                    <tr>
+                        <td class="sticky-number">
+                            {{ loop.index }}
+                        </td>
+
+                        <td class="sticky-type">
+                            {{ row.type }}
+                        </td>
+
+                        <td class="sticky-model">
+                            {{ row.model }}
+                        </td>
+
+                        <td class="sticky-reg">
+                            {{ row.registration }}
+                        </td>
+
+                        <td>
+                            {{ row.unit }}
+                        </td>
+
+                        <td>
+                            {{ row.date }}
+                        </td>
+
+                        <td>
+                            {{ row.reading }}
+                        </td>
+
+                        <td>
+                            {% if row.difference != "—" %}
+                                {% if row.difference.startswith("-") %}
+                                    <span class="negative">
+                                        {{ row.difference }}
+                                    </span>
+                                {% else %}
+                                    <span class="positive">
+                                        {{ row.difference }}
+                                    </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="reference-value">—</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {{ row.notes }}
+                        </td>
+
+                        <td>
+                            <span class="status status-{{ row.status_class }}">
+                                {{ row.status }}
+                            </span>
+                        </td>
+                    </tr>
+
+                    {% else %}
+
+                    <tr>
+                        <td colspan="10">
+                            لا يوجد عتاد مسجل.
+                        </td>
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

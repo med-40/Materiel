@@ -9,6 +9,7 @@ from app.modules.users.router import router as users_router
 from app.modules.equipment_types.router import router as equipment_types_router
 from app.modules.equipment.router import router as equipment_router
 from app.modules.dashboard.router import router as dashboard_router
+from app.modules.meter_readings.router import router as meter_readings_router
 
 
 def create_app() -> FastAPI:
@@ -20,6 +21,7 @@ def create_app() -> FastAPI:
     app.include_router(equipment_types_router, tags=["equipment_types"])
     app.include_router(equipment_router, tags=["equipment"])
     app.include_router(dashboard_router, tags=["dashboard"])
+    app.include_router(meter_readings_router, tags=["meter_readings"])
 
     @app.on_event("startup")
     def on_startup():
