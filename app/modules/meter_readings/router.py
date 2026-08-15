@@ -1,7 +1,18 @@
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from typing import Optional
 
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.orm import Session
+
+from app.core.dependencies import get_current_user
 from app.core.templating import get_module_templates
+from app.database.session import get_db
+from app.modules.equipment import services as equipment_services
+from app.modules.equipment_types import services as type_services
+from app.modules.meter_readings import services
+from app.modules.users.models import User
 
 
 router = APIRouter(
@@ -9,140 +20,131 @@ router = APIRouter(
     tags=["Meter Readings"],
 )
 
-
-# نستخدم محرك القوالب الموحد للمشروع
-# حتى تستطيع الصفحة استعمال base.html الموجود في القوالب العامة.
-templates = get_module_templates(
-    "app/modules/meter_readings/templates"
-)
+templates = get_module_templates("app/modules/meter_readings/templates")
 
 
-# ---------------------------------------------------------
-# بيانات تجريبية مؤقتة
-# ---------------------------------------------------------
-# هذه البيانات مؤقتة فقط لاختبار واجهة الوحدة.
-# لن نربطها بقاعدة البيانات الآن حتى نتأكد أن الصفحة تعمل.
-DEMO_READINGS = [
-    {
-        "number": 1,
-        "type": "حفارة",
-        "model": "Excavator",
-        "registration": "EX-1001",
-        "location": "ورشة A",
-        "unit": "ساعة عمل",
-        "date": "14/08/2026",
-        "reading": "1,245",
-        "difference": "+45",
-        "note": "عمل عادي",
-        "status": "normal",
-    },
-    {
-        "number": 2,
-        "type": "شاحنة",
-        "model": "شاحنة تفريغ",
-        "registration": "TR-2050",
-        "location": "الموقع العام",
-        "unit": "كم",
-        "date": "14/08/2026",
-        "reading": "85,600",
-        "difference": "+600",
-        "note": "مهمة نقل",
-        "status": "normal",
-    },
-    {
-        "number": 3,
-        "type": "مولد",
-        "model": "150KVA",
-        "registration": "GEN-150",
-        "location": "الورشة B",
-        "unit": "ساعة عمل",
-        "date": "14/08/2026",
-        "reading": "570",
-        "difference": "+70",
-        "note": "تشغيل مستمر",
-        "status": "normal",
-    },
-    {
-        "number": 4,
-        "type": "رافعة",
-        "model": "رافعة شوكية",
-        "registration": "FL-30",
-        "location": "المستودع",
-        "unit": "ساعة عمل",
-        "date": "14/08/2026",
-        "reading": "340",
-        "difference": "—",
-        "note": "العداد مستقر",
-        "status": "warning",
-    },
-    {
-        "number": 5,
-        "type": "لودر",
-        "model": "LD-404",
-        "registration": "LD-404",
-        "location": "الموقع العام",
-        "unit": "ساعة عمل",
-        "date": "14/08/2026",
-        "reading": "12,450",
-        "difference": "+120",
-        "note": "عمل عادي",
-        "status": "normal",
-    },
-    {
-        "number": 6,
-        "type": "ضاغط هواء",
-        "model": "COMP-80",
-        "registration": "COMP-80",
-        "location": "الورشة",
-        "unit": "ساعة عمل",
-        "date": "14/08/2026",
-        "reading": "950",
-        "difference": "-50",
-        "note": "قراءة غير طبيعية",
-        "status": "danger",
-    },
-    {
-        "number": 7,
-        "type": "ماكينة لحام",
-        "model": "WEL-250",
-        "registration": "WEL-250",
-        "location": "ورشة A",
-        "unit": "ساعة عمل",
-        "date": "14/08/2026",
-        "reading": "230",
-        "difference": "+30",
-        "note": "صيانة دورية",
-        "status": "warning",
-    },
-]
+def _page_context(
+    request: Request,
+    db: Session,
+    current_user: User,
+    page: int,
+    page_size: int,
+    search: str,
+    type_id: Optional[int],
+    unit: str,
+    sort: str,
+):
+    rows, total, pages, last_update = services.list_latest_rows(
+        db,
+        page=page,
+        page_size=page_size,
+        search=search,
+        type_id=type_id,
+        unit=unit,
+        sort=sort,
+    )
+    return {
+        "request": request,
+        "user": current_user,
+        "readings": rows,
+        "equipment_options": equipment_services.list_equipment(db, limit=10000),
+        "types": type_services.list_types(db),
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": pages,
+        "search": search,
+        "type_id": type_id,
+        "unit": unit,
+        "sort": sort,
+        "last_update": last_update,
+    }
 
 
-# ---------------------------------------------------------
-# صفحة قراءات العدادات
-# ---------------------------------------------------------
 @router.get("", response_class=HTMLResponse)
-async def meter_readings_page(request: Request):
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+def meter_readings_page(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=5, le=100),
+    search: str = Query(""),
+    type_id: Optional[int] = Query(None),
+    unit: str = Query(""),
+    sort: str = Query("date_desc"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     return templates.TemplateResponse(
         "meter_readings.html",
-        {
-            "request": request,
-            "readings": DEMO_READINGS,
-            "last_update": "14/08/2026",
-        },
+        _page_context(
+            request,
+            db,
+            current_user,
+            page,
+            page_size,
+            search,
+            type_id,
+            unit,
+            sort,
+        ),
     )
 
 
-# ---------------------------------------------------------
-# دعم الرابط الذي يحتوي على /
-# /meter-readings/
-# ---------------------------------------------------------
-@router.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def meter_readings_page_slash(request: Request):
+@router.post("/create")
+def meter_reading_create(
+    equipment_id: int = Form(...),
+    reading_date: str = Form(...),
+    value: str = Form(...),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        date_value = datetime.strptime(reading_date, "%Y-%m-%d")
+        meter_value = Decimal(value.strip())
+    except (ValueError, InvalidOperation):
+        raise HTTPException(status_code=400, detail="تاريخ أو قيمة عداد غير صحيحة")
+
+    equipment = equipment_services.get_equipment(db, equipment_id)
+    if not equipment:
+        raise HTTPException(status_code=404, detail="العتاد غير موجود")
+
+    unit = equipment.equipment_type.measurement_unit if equipment.equipment_type else "hours"
+    try:
+        services.create_reading(
+            db,
+            equipment_id=equipment_id,
+            odometer=meter_value if unit == "km" else None,
+            hours=meter_value if unit == "hours" else None,
+            reading_date=date_value,
+            notes=notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return RedirectResponse(
+        url="/meter-readings",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.get("/history/{equipment_id}", response_class=HTMLResponse)
+def meter_history_page(
+    equipment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    equipment, rows = services.history_rows(db, equipment_id)
+    if not equipment:
+        raise HTTPException(status_code=404, detail="العتاد غير موجود")
+
     return templates.TemplateResponse(
-        "meter_readings.html",
+        "meter_readings_list.html",
         {
             "request": request,
-            "readings": DEMO_READINGS,
-            "last_update": "14/08/2026",
+            "user": current_user,
+            "equipment": equipment,
+            "rows": rows,
         },
     )
