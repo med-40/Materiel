@@ -213,7 +213,6 @@ def history_rows(db: Session, equipment_id: int):
                 "status": status,
                 "status_class": status_class,
                 "unit": "كم" if unit_code == "km" else "ساعة عمل",
-                "unit_code": unit_code,
             }
         )
         previous = reading
@@ -242,13 +241,26 @@ def create_reading(
 
     reading = MeterReading(
         equipment_id=equipment_id,
-        odometer=odometer,
-        hours=hours,
         reading_date=reading_date or datetime.utcnow(),
-        notes=notes,
+        odometer=value if unit_code == "km" else None,
+        hours=value if unit_code == "hours" else None,
         source="manual",
+        notes=notes or None,
     )
     db.add(reading)
+    db.flush()
+
+    latest = (
+        db.query(MeterReading)
+        .filter(MeterReading.equipment_id == equipment_id)
+        .order_by(MeterReading.reading_date.desc(), MeterReading.id.desc())
+        .first()
+    )
+    if unit_code == "km":
+        equipment.current_odometer = _value(latest, unit_code)
+    else:
+        equipment.current_hours = _value(latest, unit_code)
+
     db.commit()
     db.refresh(reading)
     return reading
