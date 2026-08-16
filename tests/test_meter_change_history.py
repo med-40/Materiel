@@ -4,7 +4,7 @@ from app.modules.meter_readings import services
 from app.modules.meter_readings.audit import MeterReadingChange
 from app.modules.meter_readings.audit_service import create_operation
 from app.modules.users.models import User
-from test_meter_readings import seed_equipment
+from test_meter_readings import db, seed_equipment
 
 
 def test_meter_change_history_records_old_and_new_values(db):
