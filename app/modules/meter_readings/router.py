@@ -6,6 +6,7 @@ from html import escape
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from openpyxl import load_workbook
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
@@ -102,14 +103,48 @@ def meter_reading_create(equipment_id: int = Form(...), reading_date: str = Form
         meter_value = _parse_decimal(value)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
     equipment = equipment_services.get_equipment(db, equipment_id)
     if not equipment:
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
+
     unit = equipment.equipment_type.measurement_unit if equipment.equipment_type else "hours"
     try:
-        services.create_reading(db, equipment_id=equipment_id, odometer=meter_value if unit == "km" else None, hours=meter_value if unit == "hours" else None, reading_date=date_value, notes=notes)
+        services.create_reading(
+            db,
+            equipment_id=equipment_id,
+            odometer=meter_value if unit == "km" else None,
+            hours=meter_value if unit == "hours" else None,
+            reading_date=date_value,
+            notes=notes,
+        )
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
+    except SQLAlchemyError as exc:
+        db.rollback()
+        # لا نترك FastAPI يعرض 500 عامًا؛ أرسل سبب فشل قاعدة البيانات للواجهة
+        # حتى يستطيع المستخدم/المطور معرفة الخطأ الحقيقي، مع عدم حفظ أي جزء من القراءة.
+        detail = str(getattr(exc, "orig", None) or exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "message": "تعذر حفظ القراءة بسبب خطأ في قاعدة البيانات.",
+                "errors": [_error_card(detail, "خطأ في قاعدة البيانات")],
+            },
+        )
+    except Exception as exc:
+        db.rollback()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "message": "تعذر حفظ القراءة بسبب خطأ غير متوقع.",
+                "errors": [_error_card(str(exc), "خطأ غير متوقع")],
+            },
+        )
+
     return JSONResponse({"ok": True, "message": "تم حفظ القراءة بنجاح"})
 
 
@@ -129,7 +164,12 @@ def meter_readings_bulk_create(payload: dict = Body(...), db: Session = Depends(
             parse_errors.append(_error_card(f"الصف {index}: {exc}"))
     if parse_errors:
         return JSONResponse(status_code=400, content={"created": 0, "skipped": len(raw_rows), "errors": parse_errors[:100], "message": "لم يتم حفظ أي صف لأن البيانات تحتوي على أخطاء. صحح الأخطاء ثم أعد المحاولة."})
-    created, skipped, service_errors = services.create_bulk_readings(db, valid_rows)
+    try:
+        created, skipped, service_errors = services.create_bulk_readings(db, valid_rows)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        detail = str(getattr(exc, "orig", None) or exc)
+        return JSONResponse(status_code=500, content={"created": 0, "skipped": len(valid_rows), "errors": [_error_card(detail, "خطأ في قاعدة البيانات")], "message": "تعذر حفظ القراءات بسبب خطأ في قاعدة البيانات. لم يتم حفظ أي صف."})
     errors = [_error_card(x) for x in service_errors]
     status_code = 400 if errors else 200
     return JSONResponse(status_code=status_code, content={"created": created, "skipped": skipped, "errors": errors[:100], "message": "لم يتم حفظ أي قراءة بسبب وجود أخطاء. صححها ثم أعد المحاولة." if errors else "تم الحفظ بنجاح."})
@@ -208,13 +248,20 @@ def meter_readings_import_excel(file: UploadFile = File(...), db: Session = Depe
         if parse_errors:
             return JSONResponse(status_code=400, content={"created": 0, "skipped": len(import_rows) + len(parse_errors), "errors": parse_errors[:100], "message": "لم يتم حفظ أي صف لأن الملف يحتوي على أخطاء. صحح الأخطاء الظاهرة ثم أعد الاستيراد."})
 
-        created, skipped, service_errors = services.create_bulk_readings(db, import_rows)
+        try:
+            created, skipped, service_errors = services.create_bulk_readings(db, import_rows)
+        except SQLAlchemyError as exc:
+            db.rollback()
+            detail = str(getattr(exc, "orig", None) or exc)
+            return JSONResponse(status_code=500, content={"created": 0, "skipped": len(import_rows), "errors": [_error_card(detail, "خطأ في قاعدة البيانات")], "message": "تعذر استيراد القراءات بسبب خطأ في قاعدة البيانات. لم يتم حفظ أي صف."})
         errors = [_error_card(x) for x in service_errors]
         status_code = 400 if errors else 200
-        return JSONResponse(status_code=status_code, content={"created": created, "skipped": skipped, "errors": errors[:100], "message": "لم يتم حفظ أي قراءة بسبب وجود أخطاء. صححها ثم أعد الاستيراد." if errors else "تم استيراد القراءات بنجاح."})
+        return JSONResponse(status_code=status_code, content={"created": created, "skipped": skipped, "errors": errors[:100], "message": "لم يتم حفظ أي قراءة بسبب وجود أخطاء. صحح الأخطاء الظاهرة ثم أعد الاستيراد." if errors else "تم استيراد القراءات بنجاح."})
     except ValueError as exc:
+        db.rollback()
         return JSONResponse(status_code=400, content={"created": 0, "skipped": 0, "errors": [_error_card(str(exc))]})
     except Exception as exc:
+        db.rollback()
         return JSONResponse(status_code=400, content={"created": 0, "skipped": 0, "errors": [_error_card(f"تعذر قراءة ملف Excel: {exc}", "تعذر قراءة ملف Excel")]})
 
 
