@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String
+from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String, event, func
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
@@ -25,11 +25,12 @@ class MeterReading(Base):
     )
 
     # تاريخ إنشاء السجل في النظام، مستقل عن تاريخ القراءة.
-    # مهم خصوصًا عند إدخال قراءات تاريخية قديمة.
+    # لذلك يمكن إدخال قراءة قديمة أو مستقبلية دون أن يتأثر created_at.
     created_at = Column(
         DateTime,
         nullable=False,
         default=datetime.utcnow,
+        server_default=func.current_timestamp(),
     )
 
     odometer = Column(Numeric(10, 1), nullable=True)
@@ -39,3 +40,11 @@ class MeterReading(Base):
     notes = Column(String(300), nullable=True)
 
     equipment = relationship("Equipment")
+
+
+@event.listens_for(MeterReading, "before_insert")
+def _set_created_at_before_insert(mapper, connection, target):
+    # ضمان تعبئة created_at حتى مع قواعد بيانات قديمة لم يكن فيها
+    # DEFAULT على العمود، وهو ما يمنع خطأ NOT NULL constraint failed.
+    if target.created_at is None:
+        target.created_at = datetime.utcnow()
