@@ -2,20 +2,20 @@ from datetime import datetime, timedelta
 from io import BytesIO
 
 import pytest
+from fastapi import UploadFile
 from openpyxl import Workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from fastapi import UploadFile
 
 from app.database.base import Base
-from app.modules.users.models import User
-from app.modules.equipment_types.models import EquipmentType, EquipmentModel
 from app.modules.equipment.models import Equipment
-from app.modules.meter_readings.models import MeterReading
+from app.modules.equipment_types.models import EquipmentModel, EquipmentType
 from app.modules.meter_readings import services
-from app.modules.meter_readings.router import meter_readings_import_excel
 from app.modules.meter_readings.audit import MeterReadingOperation, MeterReadingOperationEvent
+from app.modules.meter_readings.models import MeterReading
+from app.modules.meter_readings.router import meter_readings_import_excel
+from app.modules.users.models import User
 
 engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
@@ -40,11 +40,29 @@ def seed_equipment(db, registration="688", unit="km"):
     model = EquipmentModel(name=f"طراز-{registration}", equipment_type_id=et.id)
     db.add(model)
     db.flush()
-    equipment = Equipment(asset_code=f"A-{registration}", registration_number=registration, equipment_type_id=et.id, equipment_model_id=model.id, operational_status="available")
+    equipment = Equipment(
+        asset_code=f"A-{registration}",
+        registration_number=registration,
+        equipment_type_id=et.id,
+        equipment_model_id=model.id,
+        operational_status="available",
+    )
     db.add(equipment)
     db.commit()
     db.refresh(equipment)
     return equipment
+
+
+def bulk_row(equipment, reading_date, value, status="available", row_number=2):
+    return {
+        "equipment_type": equipment.equipment_type.name,
+        "registration": equipment.registration_number,
+        "reading_date": reading_date,
+        "km_value": value,
+        "hours_value": None,
+        "equipment_status": status,
+        "_row_number": row_number,
+    }
 
 
 def test_manual_reading_and_monotonic_validation(db):
@@ -71,9 +89,9 @@ def test_bulk_import_saves_valid_rows_skips_invalid_rows_and_blank_is_zero(db):
     base = datetime(2026, 8, 10)
     services.create_reading(db, equipment.id, odometer=100, reading_date=base)
     rows = [
-        {"registration": "688", "reading_date": base + timedelta(days=1), "km_value": 120, "equipment_status": "available", "_row_number": 2},
-        {"registration": "688", "reading_date": base + timedelta(days=2), "km_value": 110, "equipment_status": "available", "_row_number": 3},
-        {"registration": "688", "reading_date": base + timedelta(days=3), "km_value": None, "hours_value": None, "equipment_status": "unavailable", "_row_number": 4},
+        bulk_row(equipment, base + timedelta(days=1), 120, row_number=2),
+        bulk_row(equipment, base + timedelta(days=2), 110, row_number=3),
+        bulk_row(equipment, base + timedelta(days=3), None, status="unavailable", row_number=4),
     ]
     created, rejected, errors, warnings, reading_ids = services.create_bulk_readings(db, rows)
     assert created == 2
@@ -90,10 +108,10 @@ def test_excel_arabic_headers_reverse_order_invalid_row_and_operation_log(db):
     equipment = seed_equipment(db, "688")
     wb = Workbook()
     ws = wb.active
-    ws.append(["الملاحظات", "الساعات", "رقم التسجيل", "التاريخ", "الكيلومترات"])
-    ws.append(["قراءة سليمة", None, "688", "15/08/2026", 333])
-    ws.append(["قراءة صفرية", None, "688", "16/08/2026", None])
-    ws.append(["قراءة خاطئة", None, "688", "17/08/2026", 200])
+    ws.append(["حالة العداد", "الكيلومترات", "التاريخ", "رقم التسجيل", "نوع العتاد", "الساعات"])
+    ws.append(["يعمل", 333, "15/08/2026", "688", "نوع-688", None])
+    ws.append(["لا يعمل", None, "16/08/2026", "688", "نوع-688", None])
+    ws.append(["يعمل", 200, "17/08/2026", "688", "نوع-688", None])
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
@@ -103,7 +121,7 @@ def test_excel_arabic_headers_reverse_order_invalid_row_and_operation_log(db):
     db.commit()
     db.refresh(user)
 
-    response = meter_readings_import_excel(upload, "unavailable", db, user)
+    response = meter_readings_import_excel(upload, None, db, user)
     assert response.status_code == 200
     payload = response.body.decode("utf-8")
     assert '"created":2' in payload
@@ -134,7 +152,7 @@ def test_operation_rollback_removes_only_its_readings(db):
     equipment = seed_equipment(db, "688")
     base = datetime(2026, 8, 10)
     permanent = services.create_reading(db, equipment.id, odometer=100, reading_date=base)
-    created, rejected, errors, warnings, ids = services.create_bulk_readings(db, [{"registration": "688", "reading_date": base + timedelta(days=1), "km_value": 120, "equipment_status": "available", "_row_number": 2}])
+    created, rejected, errors, warnings, ids = services.create_bulk_readings(db, [bulk_row(equipment, base + timedelta(days=1), 120)])
     assert created == 1 and not errors
     from app.modules.meter_readings.audit_service import create_operation, rollback_operation
     op = create_operation(db, "paste", user_id=None, total_rows=1, reading_ids=ids, rejected_rows=0)
@@ -146,12 +164,12 @@ def test_operation_rollback_removes_only_its_readings(db):
     assert op.status == "rolled_back"
 
 
-def test_excel_screenshot_style_headers_are_detected(db):
+def test_excel_headers_are_detected_without_relying_on_column_order(db):
     equipment = seed_equipment(db, "688", "km")
     wb = Workbook()
     ws = wb.active
-    ws.append(["رقم التسجيل", "التاريخ", "عداد الكم", "عداد الساعات", "الملاحظات"])
-    ws.append(["688", "16/08/2026", 900, None, "سليم"])
+    ws.append(["رقم التسجيل", "حالة العداد", "عداد الكم", "نوع العتاد", "التاريخ", "عداد الساعات"])
+    ws.append(["688", "يعمل", 900, "نوع-688", "16/08/2026", None])
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
@@ -160,9 +178,9 @@ def test_excel_screenshot_style_headers_are_detected(db):
     db.add(user)
     db.commit()
     db.refresh(user)
-    response = meter_readings_import_excel(upload, "available", db, user)
+    response = meter_readings_import_excel(upload, None, db, user)
     assert response.status_code == 200
     assert b'"created":1' in response.body
-    assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 1
     reading = db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).one()
     assert float(reading.odometer) == 900.0
+    assert reading.equipment_status == "available"
