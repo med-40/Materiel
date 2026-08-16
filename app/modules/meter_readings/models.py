@@ -10,41 +10,24 @@ class MeterReading(Base):
     __tablename__ = "meter_readings"
 
     id = Column(Integer, primary_key=True, index=True)
-
-    equipment_id = Column(
-        Integer,
-        ForeignKey("equipment.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-
-    reading_date = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-    )
-
-    # تاريخ إنشاء السجل في النظام، مستقل عن تاريخ القراءة.
-    # لذلك يمكن إدخال قراءة قديمة أو مستقبلية دون أن يتأثر created_at.
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-        server_default=func.current_timestamp(),
-    )
-
+    equipment_id = Column(Integer, ForeignKey("equipment.id", ondelete="CASCADE"), nullable=False, index=True)
+    reading_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.current_timestamp())
     odometer = Column(Numeric(10, 1), nullable=True)
     hours = Column(Numeric(10, 1), nullable=True)
-
     source = Column(String(50), nullable=False, default="manual")
     notes = Column(String(300), nullable=True)
-
     equipment = relationship("Equipment")
 
 
 @event.listens_for(MeterReading, "before_insert")
-def _set_created_at_before_insert(mapper, connection, target):
-    # ضمان تعبئة created_at حتى مع قواعد بيانات قديمة لم يكن فيها
-    # DEFAULT على العمود، وهو ما يمنع خطأ NOT NULL constraint failed.
+def _validate_meter_reading(mapper, connection, target):
+    now = datetime.utcnow()
     if target.created_at is None:
-        target.created_at = datetime.utcnow()
+        target.created_at = now
+    # لا يسمح النظام بتسجيل قراءة بتاريخ مستقبلي.
+    if target.reading_date is not None and target.reading_date.date() > now.date():
+        raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي.")
+    # إذا وصل صف من استيراد/لصق بدون قيمة عداد، تعتبر القراءة صفرية.
+    if target.odometer is None and target.hours is None:
+        target.odometer = 0
