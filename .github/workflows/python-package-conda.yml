@@ -34,3 +34,5 @@ jobs:
           name: pytest-report
           path: test-results.xml
           if-no-files-found: warn
+
+# Automated verification trigger for the meter-history fix.
