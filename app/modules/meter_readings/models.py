@@ -31,6 +31,5 @@ def _validate_meter_reading(mapper, connection, target):
     # لا يسمح النظام بتسجيل قراءة بتاريخ مستقبلي.
     if target.reading_date is not None and target.reading_date.date() > now.date():
         raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي.")
-    # إذا وصل صف من استيراد/لصق بدون قيمة عداد، تعتبر القراءة صفرية.
-    if target.odometer is None and target.hours is None:
-        target.odometer = 0
+    # لا نحول القيمة الفارغة هنا إلى صفر بشكل أعمى؛ لأن وحدة العتاد
+    # قد تكون كيلومترات أو ساعات. خدمة الإدخال هي التي تعرف الوحدة.
