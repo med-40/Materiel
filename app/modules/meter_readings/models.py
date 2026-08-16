@@ -24,6 +24,14 @@ class MeterReading(Base):
         default=datetime.utcnow,
     )
 
+    # تاريخ إنشاء السجل في النظام، مستقل عن تاريخ القراءة.
+    # مهم خصوصًا عند إدخال قراءات تاريخية قديمة.
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
     odometer = Column(Numeric(10, 1), nullable=True)
     hours = Column(Numeric(10, 1), nullable=True)
 
