@@ -108,7 +108,6 @@ def test_excel_arabic_headers_reverse_order_invalid_row_and_operation_log(db):
     payload = response.body.decode("utf-8")
     assert '"created":2' in payload
     assert '"skipped":1' in payload
-    assert "أقل من القراءة المسجلة" in payload
     assert "تم اعتبار القراءة صفرًا" in payload
 
     readings = db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).order_by(MeterReading.reading_date).all()
@@ -124,8 +123,10 @@ def test_excel_arabic_headers_reverse_order_invalid_row_and_operation_log(db):
     assert operation.rejected_rows == 1
     assert len(operation.reading_ids) == 2
     events = db.query(MeterReadingOperationEvent).filter(MeterReadingOperationEvent.operation_id == operation.id).all()
-    assert any(e.event_type == "validation_errors" for e in events)
-    assert any(e.event_type == "warnings" for e in events)
+    validation_event = next(e for e in events if e.event_type == "validation_errors")
+    assert any("أقل من القراءة المسجلة" in str(e) for e in validation_event.payload["errors"])
+    warning_event = next(e for e in events if e.event_type == "warnings")
+    assert any("تم اعتبار القراءة صفرًا" in str(w) for w in warning_event.payload["warnings"])
 
 
 def test_operation_rollback_removes_only_its_readings(db):
