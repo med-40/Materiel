@@ -25,6 +25,13 @@
         .container{max-width:none;margin:0;padding:18px 20px 28px;box-sizing:border-box}
         @media(max-width:850px){.app-sidebar{width:190px}.app-main{margin-right:190px}.container{padding:14px}.app-brand{font-size:12px}.app-menu a{font-size:11px;padding:9px 8px}.app-topbar{padding:0 12px}}
         @media(max-width:600px){.app-sidebar{position:relative;width:100%;height:auto;bottom:auto}.app-menu{display:grid;grid-template-columns:repeat(2,1fr);max-height:none}.sidebar-spacer,.sidebar-user{display:none}.sidebar-logout{margin:4px 8px 8px!important}.app-main{margin-right:0}.app-topbar{height:44px}}
+        .meter-import-error{display:flex;align-items:flex-start;gap:13px;margin:12px 0;padding:15px 16px;border:2px solid #f1aeb5;border-radius:12px;background:#fff5f6;color:#7f1d1d;box-shadow:0 2px 8px rgba(127,29,29,.08)}
+        .meter-import-error .error-icon{flex:0 0 42px;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fee2e2;font-size:25px}
+        .meter-import-error .error-title{font-size:16px;font-weight:800;margin-bottom:5px}
+        .meter-import-error .error-message{font-size:13px;line-height:1.8}
+        .meter-import-errors{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+        .meter-import-errors li{padding:9px 11px;border:1px solid #fecaca;border-radius:8px;background:#fff;color:#991b1b;font-size:13px;line-height:1.7}
+        .meter-import-ok{display:flex;align-items:center;gap:9px;margin:12px 0;padding:12px 14px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;color:#166534;font-size:13px;font-weight:700}
     </style>
 </head>
 <body>
@@ -67,6 +74,118 @@
             if(el){
                 const now=new Date();
                 el.textContent=new Intl.DateTimeFormat('ar-DZ',{day:'2-digit',month:'2-digit',year:'numeric'}).format(now);
+            }
+        })();
+
+        /* تحسين أخطاء قراءات العداد: لا نعرض "تعذر الاتصال بالخادم" إلا عند فشل الشبكة فعلاً. */
+        (function(){
+            const meterPage=document.getElementById('pasteModal')||document.getElementById('importModal')||document.getElementById('readingForm');
+            if(!meterPage)return;
+
+            function escapeHtml(value){
+                return String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[ch]));
+            }
+
+            function showBigError(result,title,message,errors){
+                const list=(errors||[]).filter(Boolean).map(x=>`<li>${String(x).includes('<div')?x:escapeHtml(x)}</li>`).join('');
+                result.innerHTML=`<div class="meter-import-error"><div class="error-icon">⚠️</div><div><div class="error-title">${escapeHtml(title||'لم يتم الحفظ')}</div><div class="error-message">${escapeHtml(message||'توجد أخطاء يجب تصحيحها قبل الحفظ.')}</div>${list?`<ul class="meter-import-errors">${list}</ul>`:''}</div></div>`;
+            }
+
+            function showOk(result,message){
+                result.innerHTML=`<div class="meter-import-ok">✓ ${escapeHtml(message||'تم الحفظ بنجاح.')}</div>`;
+            }
+
+            async function readResponse(response){
+                const type=(response.headers.get('content-type')||'').toLowerCase();
+                if(type.includes('application/json')){
+                    try{return {json:await response.json(),text:''};}catch(e){return {json:null,text:''};}
+                }
+                let text='';
+                try{text=await response.text();}catch(e){}
+                return {json:null,text};
+            }
+
+            function handleResponse(result,response,parsed,successMessage){
+                const data=parsed.json;
+                if(data){
+                    const errors=Array.isArray(data.errors)?data.errors:[];
+                    if(!response.ok||errors.length){
+                        showBigError(result,'لم يتم حفظ البيانات',data.message||'وجدت أخطاء في البيانات. صحح الأخطاء الظاهرة ثم أعد المحاولة.',errors);
+                        return false;
+                    }
+                    showOk(result,successMessage||data.message||'تم الحفظ بنجاح.');
+                    return true;
+                }
+                if(response.status===401||response.status===403){
+                    showBigError(result,'انتهت جلسة الدخول','يجب تسجيل الدخول من جديد ثم إعادة المحاولة.');
+                }else if(response.status>=500){
+                    showBigError(result,'خطأ في الخادم',`الخادم أعاد خطأ HTTP ${response.status}. لم يتم حفظ أي بيانات.`);
+                }else{
+                    showBigError(result,'استجابة غير متوقعة',`الخادم أعاد استجابة HTTP ${response.status} ولم تكن بصيغة بيانات مفهومة.`);
+                }
+                return false;
+            }
+
+            window.submitPastedReadings=async function(){
+                const result=document.getElementById('pasteResult');
+                const textarea=document.getElementById('pasteData');
+                if(!result||!textarea)return;
+                const raw=textarea.value||'';
+                const rows=(typeof splitRows==='function'?splitRows(raw):raw.trim().split(/\r?\n/).map(x=>x.split('\t'))).filter(x=>x.some(v=>String(v).trim()!==''));
+                if(!rows.length){showBigError(result,'لا توجد بيانات','الصق صفًا واحدًا على الأقل من Excel ثم أعد المحاولة.');return;}
+                const payload=rows.map(c=>({registration:c[0]||'',reading_date:typeof parseDateClient==='function'?parseDateClient(c[1]||''):(c[1]||''),km_value:c[2]||null,hours_value:c[3]||null,notes:c.slice(4).join(' ')||''}));
+                result.textContent='جاري فحص البيانات...';
+                try{
+                    const response=await fetch('/meter-readings/bulk-create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:payload})});
+                    const parsed=await readResponse(response);
+                    const ok=handleResponse(result,response,parsed,'تم حفظ جميع القراءات بنجاح.');
+                    if(ok)setTimeout(()=>location.reload(),900);
+                }catch(error){
+                    showBigError(result,'تعذر الاتصال بالخادم','حدث فشل في الاتصال بالشبكة قبل استلام استجابة من الخادم. تحقق من تشغيل التطبيق ثم أعد المحاولة.');
+                }
+            };
+
+            window.submitExcelImport=async function(){
+                const result=document.getElementById('excelResult');
+                const input=document.getElementById('excelFile');
+                if(!result||!input)return;
+                const file=input.files&&input.files[0];
+                if(!file){showBigError(result,'لم يتم اختيار ملف','اختر ملف Excel بصيغة .xlsx ثم أعد المحاولة.');return;}
+                result.textContent='جاري قراءة الملف وفحص البيانات...';
+                const form=new FormData();form.append('file',file);
+                try{
+                    const response=await fetch('/meter-readings/import-excel',{method:'POST',body:form});
+                    const parsed=await readResponse(response);
+                    const ok=handleResponse(result,response,parsed,'تم استيراد القراءات بنجاح.');
+                    if(ok)setTimeout(()=>location.reload(),900);
+                }catch(error){
+                    showBigError(result,'تعذر الاتصال بالخادم','حدث فشل في الاتصال بالشبكة قبل استلام استجابة من الخادم. تحقق من تشغيل التطبيق ثم أعد المحاولة.');
+                }
+            };
+
+            const oldForm=document.getElementById('readingForm');
+            if(oldForm){
+                const form=oldForm.cloneNode(true);
+                oldForm.replaceWith(form);
+                form.addEventListener('submit',async function(e){
+                    e.preventDefault();
+                    const result=document.getElementById('createResult');
+                    const button=document.getElementById('saveReadingBtn');
+                    button.disabled=true;result.textContent='جاري فحص القراءة وحفظها...';
+                    try{
+                        const response=await fetch(form.action,{method:'POST',body:new FormData(form),redirect:'manual'});
+                        if(response.status>=300&&response.status<400){location.href=response.headers.get('Location')||'/meter-readings';return;}
+                        const parsed=await readResponse(response);
+                        if(response.ok){location.href='/meter-readings';return;}
+                        const data=parsed.json;
+                        if(data&&data.detail)showBigError(result,'لم يتم حفظ القراءة',data.detail);
+                        else handleResponse(result,response,parsed);
+                        button.disabled=false;
+                    }catch(error){
+                        showBigError(result,'تعذر الاتصال بالخادم','حدث فشل في الاتصال بالشبكة قبل استلام استجابة من الخادم. تحقق من تشغيل التطبيق ثم أعد المحاولة.');
+                        button.disabled=false;
+                    }
+                });
             }
         })();
     </script>
