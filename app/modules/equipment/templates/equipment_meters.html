@@ -41,6 +41,69 @@
         color: #6b7280;
         background: #f3f4f6;
     }
+
+    .meter-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 18px;
+        flex-wrap: wrap;
+    }
+
+    .meter-pagination-links {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .meter-pagination a,
+    .meter-pagination .page-current,
+    .meter-pagination .page-disabled,
+    .meter-pagination .page-ellipsis {
+        min-width: 36px;
+        height: 36px;
+        padding: 0 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        text-decoration: none;
+        box-sizing: border-box;
+    }
+
+    .meter-pagination a {
+        color: inherit;
+        border: 1px solid var(--border-color, #e5e7eb);
+        background: var(--card-bg, #fff);
+    }
+
+    .meter-pagination a:hover {
+        background: var(--hover-bg, #f9fafb);
+    }
+
+    .meter-pagination .page-current {
+        font-weight: 700;
+        border: 1px solid var(--primary-color, #2563eb);
+        background: var(--primary-color, #2563eb);
+        color: #fff;
+    }
+
+    .meter-pagination .page-disabled {
+        color: #9ca3af;
+        border: 1px solid #e5e7eb;
+        background: #f9fafb;
+    }
+
+    .meter-pagination .page-ellipsis {
+        color: #6b7280;
+    }
+
+    .meter-pagination-info {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
 </style>
 
 <div class="page-header">
@@ -110,7 +173,7 @@
                 {% for reading in readings %}
 
                 <tr>
-                    <td>{{ loop.index }}</td>
+                    <td>{{ reading.number }}</td>
 
                     <td>
                         {{ reading.date }}
@@ -166,6 +229,72 @@
 
         </table>
     </div>
+
+    {% if total_readings > 0 %}
+    <div class="meter-pagination">
+        <div class="meter-pagination-info">
+            الصفحة {{ current_page }} من {{ total_pages }} — إجمالي {{ total_readings }} قراءة
+        </div>
+
+        <div class="meter-pagination-links" aria-label="التنقل بين صفحات سجل القراءات">
+            {% if current_page > 1 %}
+                <a href="/equipment/{{ item.id }}/meters?page={{ current_page - 1 }}">السابق</a>
+            {% else %}
+                <span class="page-disabled">السابق</span>
+            {% endif %}
+
+            {% if total_pages <= 7 %}
+                {% for page_number in range(1, total_pages + 1) %}
+                    {% if page_number == current_page %}
+                        <span class="page-current" aria-current="page">{{ page_number }}</span>
+                    {% else %}
+                        <a href="/equipment/{{ item.id }}/meters?page={{ page_number }}">{{ page_number }}</a>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                {% if current_page <= 4 %}
+                    {% for page_number in range(1, 6) %}
+                        {% if page_number == current_page %}
+                            <span class="page-current" aria-current="page">{{ page_number }}</span>
+                        {% else %}
+                            <a href="/equipment/{{ item.id }}/meters?page={{ page_number }}">{{ page_number }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    <span class="page-ellipsis">…</span>
+                    <a href="/equipment/{{ item.id }}/meters?page={{ total_pages }}">{{ total_pages }}</a>
+                {% elif current_page >= total_pages - 3 %}
+                    <a href="/equipment/{{ item.id }}/meters?page=1">1</a>
+                    <span class="page-ellipsis">…</span>
+                    {% for page_number in range(total_pages - 4, total_pages + 1) %}
+                        {% if page_number == current_page %}
+                            <span class="page-current" aria-current="page">{{ page_number }}</span>
+                        {% else %}
+                            <a href="/equipment/{{ item.id }}/meters?page={{ page_number }}">{{ page_number }}</a>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <a href="/equipment/{{ item.id }}/meters?page=1">1</a>
+                    <span class="page-ellipsis">…</span>
+                    {% for page_number in range(current_page - 1, current_page + 2) %}
+                        {% if page_number == current_page %}
+                            <span class="page-current" aria-current="page">{{ page_number }}</span>
+                        {% else %}
+                            <a href="/equipment/{{ item.id }}/meters?page={{ page_number }}">{{ page_number }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    <span class="page-ellipsis">…</span>
+                    <a href="/equipment/{{ item.id }}/meters?page={{ total_pages }}">{{ total_pages }}</a>
+                {% endif %}
+            {% endif %}
+
+            {% if current_page < total_pages %}
+                <a href="/equipment/{{ item.id }}/meters?page={{ current_page + 1 }}">التالي</a>
+            {% else %}
+                <span class="page-disabled">التالي</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 {% endblock %}
