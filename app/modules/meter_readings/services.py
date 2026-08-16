@@ -67,6 +67,14 @@ def normalize_equipment_status(value) -> str:
     return "available"
 
 
+
+def parse_equipment_status(value) -> str:
+    text=str(value or "").strip().lower()
+    if text in {"يعمل","يشتغل","متاح","available","working","on"}: return "available"
+    if text in {"لا يعمل","لايعمل","غير متاح","غيرمتاح","unavailable","not_working","not-working","stopped","out_of_service","out-of-service","off"}: return "unavailable"
+    raise ValueError("حالة العداد غير صحيحة؛ يجب أن تكون «يعمل» أو «لا يعمل».")
+
+
 def normalize_registration(value) -> str:
     if value is None:
         return ""
@@ -303,11 +311,16 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         if value < 0:
             errors.append(f"الصف {row_number}: قيمة العداد سالبة ({value:g})، ولم يتم حفظ القراءة.")
             continue
+        try:
+            equipment_status = parse_equipment_status(row.get("equipment_status"))
+        except ValueError as exc:
+            errors.append(f"الصف {row_number}: {exc}")
+            continue
         candidates.append({
             "equipment": equipment, "reading_date": reading_date, "value": value,
             "blank_value": blank_value,
             "notes": str(row.get("notes") or "").strip()[:300] or None,
-            "equipment_status": normalize_equipment_status(row.get("equipment_status", "available")),
+            "equipment_status": equipment_status,
             "_row_number": row_number,
         })
 
