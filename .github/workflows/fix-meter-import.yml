@@ -41,6 +41,10 @@ jobs:
               p.write_text(s, encoding='utf-8')
           PY
 
+      - name: Install test dependencies
+        run: |
+          python -m pip install -r requirements.txt pytest
+
       - name: Run meter-reading tests
         run: |
           python -m pytest tests/test_meter_readings.py -q
