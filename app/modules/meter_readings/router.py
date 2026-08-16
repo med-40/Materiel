@@ -165,23 +165,30 @@ def _normalize_header(value):
 def _header_kind(value):
     text = _normalize_header(value)
     exact = {
-        "نوعالعتاد": "equipment_type", "نوعالعتاد": "equipment_type", "equipmenttype": "equipment_type", "type": "equipment_type",
+        "نوعالعتاد": "equipment_type", "equipmenttype": "equipment_type", "type": "equipment_type",
         "رقمالتسجيل": "registration", "التسجيل": "registration", "registration": "registration", "registrationnumber": "registration", "immatriculation": "registration", "matricule": "registration", "reg": "registration",
         "التاريخ": "date", "تاريخالقراءه": "date", "تاريخالقراءة": "date", "readingdate": "date", "date": "date",
-        "الكيلومترات": "km", "كيلومترات": "km", "الكيلومتر": "km", "كيلومتر": "km", "الكم": "km", "الكلم": "km", "كلم": "km", "عدادالكلم": "km", "عدادالكيلومترات": "km", "كم": "km", "km": "km", "kilometers": "km", "kilometres": "km", "odometer": "km",
+        "الكيلومترات": "km", "كيلومترات": "km", "الكيلومتر": "km", "كيلومتر": "km", "الكم": "km", "عدادالكم": "km", "عدادالكلم": "km", "عدادالكيلومترات": "km", "عدادكم": "km", "الكلم": "km", "كلم": "km", "كم": "km", "km": "km", "kilometers": "km", "kilometres": "km", "odometer": "km",
         "الساعات": "hours", "ساعات": "hours", "ساعة": "hours", "عدادالساعات": "hours", "hours": "hours", "hour": "hours", "hourmeter": "hours",
         "القراءة": "legacy", "قيمهالعداد": "legacy", "قيمةالعداد": "legacy", "reading": "legacy", "value": "legacy", "meter": "legacy", "meterreading": "legacy",
         "حالهالعداد": "status", "حالةالعداد": "status", "status": "status", "equipmentstatus": "status", "operationalstatus": "status",
     }
     if text in exact:
         return exact[text]
-    if "نوع" in text and "عتاد" in text: return "equipment_type"
-    if "تسجيل" in text or "registration" in text or "immatriculation" in text or "matricule" in text: return "registration"
-    if "تاريخ" in text or text.endswith("date"): return "date"
-    if "كيلو" in text or "كلم" in text or "odometer" in text or text.endswith("km"): return "km"
-    if "ساع" in text or "hour" in text: return "hours"
-    if "حالهالعداد" in text or "حالةالعداد" in text or "status" in text: return "status"
-    if "قراء" in text or "value" in text or "meter" in text: return "legacy"
+    if "نوع" in text and "عتاد" in text:
+        return "equipment_type"
+    if "تسجيل" in text or "registration" in text or "immatriculation" in text or "matricule" in text:
+        return "registration"
+    if "تاريخ" in text or text.endswith("date"):
+        return "date"
+    if "كيلو" in text or "كلم" in text or "odometer" in text or text.endswith("km"):
+        return "km"
+    if "ساع" in text or "hour" in text:
+        return "hours"
+    if "حالهالعداد" in text or "حالةالعداد" in text or "status" in text:
+        return "status"
+    if "قراء" in text or "value" in text or "meter" in text:
+        return "legacy"
     return None
 
 
