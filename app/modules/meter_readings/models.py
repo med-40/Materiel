@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String, event, func
+from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String, event, func, select
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
@@ -31,5 +31,14 @@ def _validate_meter_reading(mapper, connection, target):
         target.updated_at = now
     if target.reading_date is not None and target.reading_date.date() > now.date():
         raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي.")
-    # لا نحول القيمة الفارغة هنا إلى صفر بشكل أعمى؛ لأن وحدة العتاد
-    # قد تكون كيلومترات أو ساعات. خدمة الإدخال هي التي تعرف الوحدة.
+
+    # حالة القراءة تسجل حالة العداد في لحظة إدخالها، وليس "حالة القراءة".
+    # إذا لم ترسل الخدمة حالة صريحة، نأخذ الحالة الحالية للعتاد.
+    if not target.equipment_status:
+        target.equipment_status = connection.execute(
+            select("operational_status").select_from(
+                __import__("app.modules.equipment.models", fromlist=["Equipment"]).Equipment.__table__
+            ).where(
+                __import__("app.modules.equipment.models", fromlist=["Equipment"]).Equipment.id == target.equipment_id
+            )
+        ).scalar() or "available"
