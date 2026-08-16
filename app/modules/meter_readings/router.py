@@ -5,7 +5,7 @@ from html import escape
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
-from openpyxl import load_workbook
+from app.modules.meter_readings.excel_reader import load_meter_workbook
 from openpyxl.utils.datetime import from_excel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -124,7 +124,7 @@ def meter_readings_page(request: Request, page: int = Query(1, ge=1), page_size:
 
 
 @router.post("/create")
-def meter_reading_create(equipment_id: int = Form(...), reading_date: str = Form(...), value: str = Form(...), equipment_status: str = Form("available"), notes: str = Form(""), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def meter_reading_create(equipment_id: int = Form(...), reading_date: str = Form(...), value: str = Form(...), equipment_status: str | None = Form(None), notes: str = Form(""), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         date_value = _parse_date(reading_date)
         meter_value = _parse_decimal(value)
@@ -168,7 +168,7 @@ def _prepare_paste_rows(raw_rows):
                 "hours_value": _parse_decimal(row.get("hours_value")) if row.get("hours_value") not in (None, "") else None,
                 "value": _parse_decimal(row.get("value")) if row.get("value") not in (None, "") else None,
                 "notes": row.get("notes", ""),
-                "equipment_status": row.get("equipment_status", "available"),
+                "equipment_status": row.get("equipment_status"),
                 "_row_number": index,
             })
         except ValueError as exc:
@@ -181,11 +181,10 @@ def meter_readings_bulk_create(payload: dict = Body(...), db: Session = Depends(
     raw_rows = payload.get("rows") if isinstance(payload, dict) else None
     if not isinstance(raw_rows, list):
         raise HTTPException(status_code=400, detail="بيانات اللصق غير صحيحة.")
-    equipment_status = payload.get("equipment_status", "available")
     valid_rows, parse_errors = _prepare_paste_rows(raw_rows)
     try:
         created, rejected, service_errors, warnings, reading_ids = services.create_bulk_readings(
-            db, [{**row, "equipment_status": equipment_status} for row in valid_rows]
+            db, valid_rows
         )
         errors = parse_errors + service_errors
         rejected_total = len(raw_rows) - created
@@ -204,12 +203,12 @@ def meter_readings_bulk_create(payload: dict = Body(...), db: Session = Depends(
 
 
 @router.post("/import-excel")
-def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: str = Form("available"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: str | None = Form(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     filename = file.filename or ""
     if not filename.lower().endswith(".xlsx"):
         return JSONResponse(status_code=400, content={"created": 0, "skipped": 0, "errors": [_error_card("الملف يجب أن يكون بصيغة Excel .xlsx.")]})
     try:
-        workbook = load_workbook(file.file, read_only=True, data_only=True)
+        workbook = load_meter_workbook(file.file)
         sheet = workbook.active
         rows = list(sheet.iter_rows(values_only=True))
         if not rows:
@@ -234,7 +233,7 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
                 "الملاحظات": "notes", "ملاحظات": "notes", "notes": "notes", "note": "notes",
                 "الكيلومترات": "km", "كيلومترات": "km", "الكيلومتر": "km", "كيلومتر": "km", "الكم": "km", "الكلم": "km", "كلم": "km", "عدادالكلم": "km", "عدادالكيلومترات": "km", "عدادالكيلومتر": "km", "عدادالكم": "km", "كم": "km", "km": "km", "kilometers": "km", "kilometres": "km", "odometer": "km", "odometre": "km",
                 "الساعات": "hours", "ساعات": "hours", "ساعة": "hours", "عدادالساعات": "hours", "عدادساعة": "hours", "hours": "hours", "hour": "hours", "hourmeter": "hours", "hourmeterreading": "hours",
-                "القراءة": "legacy", "قيمهالعداد": "legacy", "قيمةالعداد": "legacy", "reading": "legacy", "value": "legacy", "meter": "legacy", "meterreading": "legacy",
+                "القراءة": "legacy", "قيمهالعداد": "legacy", "قيمةالعداد": "legacy", "reading": "legacy", "value": "legacy", "meter": "legacy", "meterreading": "legacy", "حالهالعداد": "status", "حالةالعداد": "status", "status": "status", "equipmentstatus": "status", "operationalstatus": "status",
             }
             if text in exact:
                 return exact[text]
@@ -243,6 +242,7 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
             if "كيلو" in text or "كلم" in text or "odometer" in text or text.endswith("km"): return "km"
             if "ساع" in text or "hour" in text: return "hours"
             if "ملاحظ" in text or "note" in text: return "notes"
+            if "حالهالعداد" in text or "حالةالعداد" in text or "status" in text or "operationalstatus" in text: return "status"
             if "قراء" in text or "value" in text or "meter" in text: return "legacy"
             return None
 
@@ -253,7 +253,7 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
                 kind = header_kind(value)
                 if kind and kind not in kinds:
                     kinds[kind] = idx
-            if "registration" in kinds and "date" in kinds and ("km" in kinds or "hours" in kinds or "legacy" in kinds):
+            if "registration" in kinds and "date" in kinds and ("km" in kinds or "hours" in kinds or "legacy" in kinds) and ("status" in kinds or equipment_status):
                 header_info = (row_number, kinds)
                 break
         if header_info is None:
@@ -266,6 +266,7 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
         hours_idx = columns.get("hours")
         legacy_value_idx = columns.get("legacy")
         notes_idx = columns.get("notes")
+        status_idx = columns.get("status")
         import_rows, parse_errors = [], []
         previous_registration = None
         data_row_count = 0
@@ -287,16 +288,19 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
             raw_hours = cell(values, hours_idx)
             raw_legacy = cell(values, legacy_value_idx)
             notes = cell(values, notes_idx) or ""
+            status_value = cell(values, status_idx) if status_idx is not None else equipment_status
             try:
                 if registration is None or str(registration).strip() == "":
                     raise ValueError("رقم التسجيل فارغ.")
+                if status_value is None or not str(status_value).strip():
+                    raise ValueError("حالة العداد فارغة؛ يجب أن تكون «يعمل» أو «لا يعمل».")
                 import_rows.append({
                     "registration": registration,
                     "reading_date": _parse_date(raw_date),
                     "km_value": _parse_decimal(raw_km) if raw_km not in (None, "") else None,
                     "hours_value": _parse_decimal(raw_hours) if raw_hours not in (None, "") else None,
                     "value": _parse_decimal(raw_legacy) if raw_legacy not in (None, "") else None,
-                    "notes": notes, "equipment_status": equipment_status, "_row_number": row_number,
+                    "notes": notes, "equipment_status": status_value, "_row_number": row_number,
                 })
             except ValueError as exc:
                 parse_errors.append(f"صف Excel {row_number}: {exc}")
@@ -323,6 +327,11 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
     except Exception as exc:
         db.rollback()
         return JSONResponse(status_code=400, content={"created": 0, "skipped": 0, "errors": [_error_card(f"تعذر قراءة ملف Excel: {exc}", "تعذر قراءة ملف Excel")]})
+
+
+@router.post("/import-excel-preview")
+def meter_readings_import_excel_preview(file: UploadFile = File(...), equipment_status: str | None = Form(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return meter_readings_import_excel(file, equipment_status, db, current_user)
 
 
 @router.get("/history/{equipment_id}", response_class=HTMLResponse)
