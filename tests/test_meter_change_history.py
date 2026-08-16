@@ -3,6 +3,7 @@ from datetime import datetime
 from app.modules.meter_readings import services
 from app.modules.meter_readings.audit import MeterReadingChange
 from app.modules.meter_readings.audit_service import create_operation
+from app.modules.users.models import User
 from test_meter_readings import seed_equipment
 
 
@@ -25,10 +26,12 @@ def test_meter_change_history_records_old_and_new_values(db):
 def test_bulk_operation_attaches_user_and_operation_to_changes(db):
     equipment = seed_equipment(db, "901", "km")
     reading = services.create_reading(db, equipment.id, odometer=200, reading_date=datetime(2026, 8, 10))
+    user = User(username="audit-user", full_name="مستخدم الاختبار", hashed_password="x", role="admin")
+    db.add(user)
     db.commit()
-    op = create_operation(db, "paste", user_id=12345, total_rows=1, reading_ids=[reading.id], rejected_rows=0)
+    op = create_operation(db, "paste", user_id=user.id, total_rows=1, reading_ids=[reading.id], rejected_rows=0)
     db.commit()
     change = db.query(MeterReadingChange).filter(MeterReadingChange.reading_id == reading.id).order_by(MeterReadingChange.id.desc()).first()
     assert change.operation_id == op.id
-    assert change.actor_id == 12345
+    assert change.actor_id == user.id
     assert change.source == "paste"
