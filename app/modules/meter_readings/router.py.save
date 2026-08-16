@@ -1,0 +1,533 @@
+from fastapi.templating import Jinja2Templates
+from pathlib import Path
+
+from fastapi import APIRouter, Request
+from app.core.templating import get_module_templates
+
+
+router = APIRouter(
+    prefix="/meter-readings",
+    tags=["Meter Readings"],
+)
+
+templates = Jinja2Templates(
+    directory=str(Path(__file__).parent / "templates")
+)
+
+
+# بيانات تجريبية فقط في هذه المرحلة
+# لا يوجد اتصال بقاعدة البيانات
+DEMO_READINGS = [
+    {
+        "number": 1,
+        "type": "حفارة",
+        "model": "Excavator",
+        "registration": "EX-1001",
+        "location": "ورشة A",
+        "unit": "ساعة عمل",
+        "date": "14/08/2026",
+        "reading": "1,245",
+        "difference": "+45",
+        "note": "عمل عادي",
+        "status": "normal",
+    },
+    {
+        "number": 2,
+        "type": "شاحنة",
+        "model": "شاحنة تفريغ",
+        "registration": "TR-2050",
+        "location": "الموقع العام",
+        "unit": "كم",
+        "date": "14/08/2026",
+        "reading": "85,600",
+        "difference": "+600",
+        "note": "مهمة نقل",
+        "status": "normal",
+    },
+    {
+        "number": 3,
+        "type": "مولد",
+        "model": "150KVA",
+        "registration": "GEN-150",
+        "location": "الورشة B",
+        "unit": "ساعة عمل",
+        "date": "14/08/2026",
+        "reading": "570",
+        "difference": "+70",
+        "note": "تشغيل مستمر",
+        "status": "normal",
+    },
+    {
+        "number": 4,
+        "type": "رافعة",
+        "model": "رافعة شوكية",
+        "registration": "FL-30",
+        "location": "المستودع",
+        "unit": "ساعة عمل",
+        "date": "14/08/2026",
+        "reading": "340",
+        "difference": "—",
+        "note": "العداد مستقر",
+        "status": "warning",
+    },
+    {
+        "number": 5,
+        "type": "لودر",
+        "model": "LD-404",
+        "registration": "LD-404",
+        "location": "الموقع العام",
+        "unit": "ساعة عمل",
+        "date": "14/08/2026",
+        "reading": "12,450",
+        "difference": "+120",
+        "note": "عمل عادي",
+        "status": "normal",
+    },
+    {
+        "number": 6,
+        "type": "ضاغط هواء",
+        "model": "COMP-80",
+        "registration": "COMP-80",
+        "location": "الورشة",
+        "unit": "ساعة عمل",
+        "date": "14/08/2026",
+        "reading": "950",
+        "difference": "-50",
+        "note": "قراءة غير طبيعية",
+        "status": "danger",
+    },
+    {
+        "number": 7,
+        "type": "ماكينة لحام",
+        "model": "WEL-250",
+        "registration": "WEL-250",
+        "location": "ورشة A",
+        "unit": "ساعة عمل",
+        "date": "14/08/2026",
+        "reading": "230",
+        "difference": "+30",
+        "note": "صيانة دورية",
+        "status": "warning",
+    },
+]
+
+
+@router.get("/")
+async def meter_readings_page(request: Request):
+    return templates.TemplateResponse(
+        "meter_readings.html",
+        {
+            "request": request,
+            "readings": DEMO_READINGS,
+            "last_update": "14/08/2026",
+from datetime import 
+    datetime }, )
+
+
+from fastapi import 
+APIRouter, Depends, Request 
+from sqlalchemy.orm import 
+Session from 
+app.core.templating import 
+get_module_templates from 
+app.database.session import 
+get_db from 
+app.modules.equipment.models 
+import Equipment from 
+app.modules.meter_readings.models 
+import MeterReading from 
+pathlib import Path router = 
+APIRouter(
+    prefix="/meter-readings", 
+    tags=["Meter Readings"],
+) templates = 
+get_module_templates(
+    str(Path(__file__).parent 
+    / "templates")
+) def format_number(value): 
+    if value is None:
+        return "—" try: 
+        number = 
+        float(value) if 
+        number.is_integer():
+            return 
+            f"{int(number):,}"
+        return 
+        f"{number:,.1f}"
+    except (TypeError, 
+    ValueError):
+        return str(value) 
+def format_date(value):
+    if not value: return "—" 
+    if isinstance(value, 
+    datetime):
+        return 
+        value.strftime("%d/%m/%Y")
+    return str(value) 
+@router.get("") 
+@router.get("/") async def 
+meter_readings_page(
+    request: Request, db: 
+    Session = 
+    Depends(get_db),
+): equipment_list = ( 
+        db.query(Equipment) 
+        .order_by(Equipment.id.asc()) 
+        .all()
+    ) readings = [] for 
+    number, equipment in 
+    enumerate(equipment_list, 
+    start=1):
+        equipment_readings = 
+        (
+            db.query(MeterReading) 
+            .filter(MeterReading.equipment_id 
+            == equipment.id) 
+            .order_by(
+                MeterReading.reading_date.desc(), 
+                MeterReading.id.desc(),
+            ) .limit(2) 
+            .all()
+        ) latest = 
+        equipment_readings[0] 
+        if 
+        equipment_readings 
+        else None previous = 
+        (
+            equipment_readings[1] 
+            if 
+            len(equipment_readings) 
+            > 1
+            else None ) if 
+        latest:
+            if 
+            latest.odometer 
+            is not None:
+                reading_value 
+                = 
+                latest.odometer 
+                unit = "كم" 
+                if previous 
+                and 
+                previous.odometer 
+                is not None:
+                    difference 
+                    = 
+                    latest.odometer 
+                    - 
+                    previous.odometer
+                else: 
+                    difference 
+                    = None
+            elif 
+            latest.hours is 
+            not None:
+                reading_value 
+                = 
+                latest.hours 
+                unit = "ساعة 
+                عمل" if 
+                previous and 
+                previous.hours 
+                is not None:
+                    difference 
+                    = 
+                    latest.hours 
+                    - 
+                    previous.hours
+                else: 
+                    difference 
+                    = None
+            else: 
+                reading_value 
+                = None unit 
+                = "—" 
+                difference = 
+                None
+            if difference is 
+            None:
+                difference_text 
+                = "—" status 
+                = "warning"
+            else: 
+                difference_text 
+                = 
+                format_number(difference) 
+                if 
+                float(difference) 
+                < 0:
+                    status = 
+                    "danger"
+                else: status 
+                    = 
+                    "normal"
+            note = 
+            latest.notes or 
+            "—" date = 
+            format_date(latest.reading_date)
+        else: reading_value 
+            = None unit = 
+            "—" 
+            difference_text 
+            = "—" note = "لا 
+            توجد قراءة" date 
+            = "—" status = 
+            "warning"
+        readings.append( { 
+                "number": 
+                number, 
+                "type": (
+                    equipment.equipment_type.name 
+                    if 
+                    equipment.equipment_type 
+                    else "—"
+                ), "model": 
+                (
+                    equipment.equipment_model.name 
+                    if 
+                    equipment.equipment_model 
+                    else "—"
+                ), 
+                "registration": 
+                equipment.registration_number 
+                or "—", 
+                "location": 
+                "—", "unit": 
+                unit, 
+                "date": 
+                date, 
+                "reading": 
+                format_number(reading_value), 
+                "difference": 
+                difference_text, 
+                "note": 
+                note, 
+                "status": 
+                status,
+            }
+        ) last_update = "—" 
+    all_latest = (
+        db.query(MeterReading) 
+        .order_by(
+            MeterReading.reading_date.desc(), 
+            MeterReading.id.desc(),
+        ) .first() ) if 
+    all_latest:
+        last_update = 
+        format_date(all_latest.reading_date)
+    return 
+    templates.TemplateResponse(
+        "meter_readings.html", 
+        {
+            "request": 
+            request, 
+            "readings": 
+            readings, 
+            "last_update": 
+            last_update,
+        },
+    )from datetime import 
+    datetime
+from fastapi import 
+APIRouter, Depends, Request 
+from sqlalchemy.orm import 
+Session from 
+app.core.templating import 
+get_module_templates from 
+app.database.session import 
+get_db from 
+app.modules.equipment.models 
+import Equipment from 
+app.modules.meter_readings.models 
+import MeterReading from 
+pathlib import Path router = 
+APIRouter(
+    prefix="/meter-readings", 
+    tags=["Meter Readings"],
+) templates = 
+get_module_templates(
+    str(Path(__file__).parent 
+    / "templates")
+) def format_number(value): 
+    if value is None:
+        return "—" try: 
+        number = 
+        float(value) if 
+        number.is_integer():
+            return 
+            f"{int(number):,}"
+        return 
+        f"{number:,.1f}"
+    except (TypeError, 
+    ValueError):
+        return str(value) 
+def format_date(value):
+    if not value: return "—" 
+    if isinstance(value, 
+    datetime):
+        return 
+        value.strftime("%d/%m/%Y")
+    return str(value) 
+@router.get("") 
+@router.get("/") async def 
+meter_readings_page(
+    request: Request, db: 
+    Session = 
+    Depends(get_db),
+): equipment_list = ( 
+        db.query(Equipment) 
+        .order_by(Equipment.id.asc()) 
+        .all()
+    ) readings = [] for 
+    number, equipment in 
+    enumerate(equipment_list, 
+    start=1):
+        equipment_readings = 
+        (
+            db.query(MeterReading) 
+            .filter(MeterReading.equipment_id 
+            == equipment.id) 
+            .order_by(
+                MeterReading.reading_date.desc(), 
+                MeterReading.id.desc(),
+            ) .limit(2) 
+            .all()
+        ) latest = 
+        equipment_readings[0] 
+        if 
+        equipment_readings 
+        else None previous = 
+        (
+            equipment_readings[1] 
+            if 
+            len(equipment_readings) 
+            > 1
+            else None ) if 
+        latest:
+            if 
+            latest.odometer 
+            is not None:
+                reading_value 
+                = 
+                latest.odometer 
+                unit = "كم" 
+                if previous 
+                and 
+                previous.odometer 
+                is not None:
+                    difference 
+                    = 
+                    latest.odometer 
+                    - 
+                    previous.odometer
+                else: 
+                    difference 
+                    = None
+            elif 
+            latest.hours is 
+            not None:
+                reading_value 
+                = 
+                latest.hours 
+                unit = "ساعة 
+                عمل" if 
+                previous and 
+                previous.hours 
+                is not None:
+                    difference 
+                    = 
+                    latest.hours 
+                    - 
+                    previous.hours
+                else: 
+                    difference 
+                    = None
+            else: 
+                reading_value 
+                = None unit 
+                = "—" 
+                difference = 
+                None
+            if difference is 
+            None:
+                difference_text 
+                = "—" status 
+                = "warning"
+            else: 
+                difference_text 
+                = 
+                format_number(difference) 
+                if 
+                float(difference) 
+                < 0:
+                    status = 
+                    "danger"
+                else: status 
+                    = 
+                    "normal"
+            note = 
+            latest.notes or 
+            "—" date = 
+            format_date(latest.reading_date)
+        else: reading_value 
+            = None unit = 
+            "—" 
+            difference_text 
+            = "—" note = "لا 
+            توجد قراءة" date 
+            = "—" status = 
+            "warning"
+        readings.append( { 
+                "number": 
+                number, 
+                "type": (
+                    equipment.equipment_type.name 
+                    if 
+                    equipment.equipment_type 
+                    else "—"
+                ), "model": 
+                (
+                    equipment.equipment_model.name 
+                    if 
+                    equipment.equipment_model 
+                    else "—"
+                ), 
+                "registration": 
+                equipment.registration_number 
+                or "—", 
+                "location": 
+                "—", "unit": 
+                unit, 
+                "date": 
+                date, 
+                "reading": 
+                format_number(reading_value), 
+                "difference": 
+                difference_text, 
+                "note": 
+                note, 
+                "status": 
+                status,
+            }
+        ) last_update = "—" 
+    all_latest = (
+        db.query(MeterReading) 
+        .order_by(
+            MeterReading.reading_date.desc(), 
+            MeterReading.id.desc(),
+        ) .first() ) if 
+    all_latest:
+        last_update = 
+        format_date(all_latest.reading_date)
+    return 
+    templates.TemplateResponse(
+        "meter_readings.html", 
+        {
+            "request": 
+            request, 
+            "readings": 
+            readings, 
+            "last_update": 
+            last_update,
+        },
+    )
