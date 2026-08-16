@@ -2,7 +2,7 @@ from html import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.core.dependencies import get_current_user
@@ -63,8 +63,7 @@ def operations(
     current_user: User = Depends(get_current_user),
     kind: str = Query('', description='نوع العملية'),
 ):
-    # هذه الصفحة تعرض التعديلات التي أثرت فعليًا على البيانات فقط؛
-    # الصفوف المرفوضة/الفارغة تبقى في تفاصيل العملية وسجل الأحداث.
+    # تعرض هذه الصفحة التعديلات التي أثرت فعليًا على البيانات فقط.
     query = (
         db.query(MeterReadingOperation)
         .filter(MeterReadingOperation.accepted_rows > 0)
@@ -78,7 +77,6 @@ def operations(
     reading_ids = [int(rid) for op in operations_rows for rid in (op.reading_ids or []) if str(rid).isdigit()]
     readings = (
         db.query(MeterReading)
-        .options(joinedload(MeterReading.equipment).joinedload('equipment_type'), joinedload(MeterReading.equipment).joinedload('equipment_model'))
         .filter(MeterReading.id.in_(reading_ids))
         .order_by(MeterReading.reading_date.desc(), MeterReading.id.desc())
         .all()
@@ -88,7 +86,7 @@ def operations(
     names = _user_names(db, [x.created_by_id for x in operations_rows] + [x.rolled_back_by_id for x in operations_rows])
 
     body = '''<html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>سجل تعديلات قراءات العدادات</title><style>
-body{font-family:Arial,sans-serif;margin:20px;background:#f8fafc;color:#172b4d}h2{margin-bottom:6px}.hint{color:#64748b;font-size:13px;margin:0 0 14px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar a,.toolbar button{padding:8px 12px;border:1px solid #dbe3ec;border-radius:7px;background:#fff;color:#173f67;text-decoration:none}.toolbar a.active{background:#1769d1;color:#fff;border-color:#1769d1}.card{background:#fff;border:1px solid #dbe3ec;border-radius:10px;overflow:auto}table{width:100%;min-width:1050px;border-collapse:collapse}th,td{padding:9px;border:1px solid #dbe3ec;text-align:center;white-space:nowrap}th{background:#173f67;color:white}td strong{color:#173f67}.muted{color:#64748b}.changed{font-weight:700;color:#166534}.rolled{color:#991b1b;font-weight:700}.details{color:#1769d1;text-decoration:none;font-weight:700}.empty{padding:30px;text-align:center;color:#64748b}.summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.badge{background:#eef5ff;border:1px solid #c9ddfb;border-radius:999px;padding:5px 9px;font-size:12px}
+body{font-family:Arial,sans-serif;margin:20px;background:#f8fafc;color:#172b4d}h2{margin-bottom:6px}.hint{color:#64748b;font-size:13px;margin:0 0 14px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar a{padding:8px 12px;border:1px solid #dbe3ec;border-radius:7px;background:#fff;color:#173f67;text-decoration:none}.toolbar a.active{background:#1769d1;color:#fff;border-color:#1769d1}.card{background:#fff;border:1px solid #dbe3ec;border-radius:10px;overflow:auto}table{width:100%;min-width:1050px;border-collapse:collapse}th,td{padding:9px;border:1px solid #dbe3ec;text-align:center;white-space:nowrap}th{background:#173f67;color:white}td strong{color:#173f67}.changed{font-weight:700;color:#166534}.rolled{color:#991b1b;font-weight:700}.details{color:#1769d1;text-decoration:none;font-weight:700}.empty{padding:30px;text-align:center;color:#64748b}.summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.badge{background:#eef5ff;border:1px solid #c9ddfb;border-radius:999px;padding:5px 9px;font-size:12px}
 </style></head><body>'''
     body += '<h2>سجل تعديلات قراءات العدادات</h2>'
     body += '<p class="hint">يعرض فقط القراءات التي أُضيفت فعليًا إلى النظام بواسطة عمليات الإدخال. الأخطاء والصفوف المرفوضة لا تختفي؛ تجدها داخل تفاصيل العملية.</p>'
@@ -105,7 +103,6 @@ body{font-family:Arial,sans-serif;margin:20px;background:#f8fafc;color:#172b4d}h
         for rid in (op.reading_ids or []):
             reading = reading_map.get(int(rid)) if str(rid).isdigit() else None
             if not reading:
-                # القراءة قد تكون أزيلت بعد التراجع؛ تبقى العملية ظاهرة في التفاصيل فقط.
                 continue
             found += 1
             equipment = reading.equipment
@@ -117,7 +114,7 @@ body{font-family:Arial,sans-serif;margin:20px;background:#f8fafc;color:#172b4d}h
     if found == 0:
         body += '<tr><td colspan="12" class="empty">لا توجد تعديلات فعلية مطابقة للفلتر.</td></tr>'
     body += '</tbody></table></div>'
-    body += '<p class="hint">ملاحظة: التراجع عن عملية يحذف القراءات التي أنشأتها تلك العملية فقط، ويسجل ذلك في تاريخ العملية.</p>'
+    body += '<p class="hint">التراجع عن عملية يحذف القراءات التي أنشأتها تلك العملية فقط، ويسجل ذلك في تاريخ العملية.</p>'
     body += '</body></html>'
     return HTMLResponse(body)
 
@@ -128,7 +125,7 @@ def operation_details(operation_id: int, db: Session = Depends(get_db), current_
     if not op:
         raise HTTPException(404, 'عملية الإدخال غير موجودة.')
     events = db.query(MeterReadingOperationEvent).filter(MeterReadingOperationEvent.operation_id == op.id).order_by(MeterReadingOperationEvent.created_at.asc(), MeterReadingOperationEvent.id.asc()).all()
-    readings = db.query(MeterReading).options(joinedload(MeterReading.equipment).joinedload('equipment_type'), joinedload(MeterReading.equipment).joinedload('equipment_model')).filter(MeterReading.id.in_(op.reading_ids or [])).order_by(MeterReading.reading_date.asc(), MeterReading.id.asc()).all() if op.reading_ids else []
+    readings = db.query(MeterReading).filter(MeterReading.id.in_(op.reading_ids or [])).order_by(MeterReading.reading_date.asc(), MeterReading.id.asc()).all() if op.reading_ids else []
     names = _user_names(db, [op.created_by_id, op.rolled_back_by_id] + [e.actor_id for e in events])
     status = _status_label(op.status)
     label = _kind_label(op.kind)
