@@ -36,6 +36,17 @@ def _repair_existing_meter_readings_schema() -> None:
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _repair_existing_meter_readings_schema()
+    # تنظيف البيانات القديمة التي أُدخلت قبل تفعيل الحماية الدائمة.
+    from app.database.session import SessionLocal
+    from app.modules.meter_readings.legacy_cleanup import cleanup_legacy_readings
+
+    db = SessionLocal()
+    try:
+        removed = cleanup_legacy_readings(db)
+        if removed:
+            print(f"[init_db] تم حذف {removed} قراءة قديمة مخالفة لقواعد التاريخ/القيمة.")
+    finally:
+        db.close()
 
 
 def create_default_admin() -> None:
