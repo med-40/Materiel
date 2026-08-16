@@ -2,27 +2,32 @@ name: Repair meter readings
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   repair:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Apply repair script
+        with:
+          fetch-depth: 0
+      - name: Apply repair
         run: python scripts/repair_meter_readings.py
       - name: Syntax check
         run: python -m compileall -q app web run_web.py scripts/repair_meter_readings.py
-      - name: Commit repaired files and remove helper
+      - name: Commit repair
         run: |
-          rm -f .github/workflows/repair_meter_readings.yml scripts/repair_meter_readings.py
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app/modules/meter_readings/services.py app/modules/meter_readings/router.py app/modules/meter_readings/templates/meter_readings.html .github/workflows/repair_meter_readings.yml scripts/repair_meter_readings.py
-          git diff --cached --quiet || git commit -m 'fix meter reading cleanup and paste columns'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/modules/meter_readings/services.py app/modules/meter_readings/router.py app/modules/meter_readings/templates/meter_readings.html scripts/repair_meter_readings.py
+          if git diff --cached --quiet; then
+            echo "لا توجد تغييرات."
+            exit 0
+          fi
+          git commit -m "fix: meter reading cleanup and paste columns"
           git push
