@@ -99,8 +99,6 @@ def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: st
     total = query.count()
     if sort == "registration":
         query = query.order_by(Equipment.registration_number.asc(), Equipment.id.asc())
-    elif sort == "type":
-        query = query.order_by(EquipmentType.name.asc(), Equipment.id.asc())
     elif sort == "date_asc":
         query = query.order_by(latest_dates.c.latest_date.asc(), Equipment.id.asc())
     else:
@@ -121,7 +119,7 @@ def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: st
         previous = history[equipment.id][1] if len(history[equipment.id]) > 1 else None
         difference = _difference(latest, previous, unit_code) if latest else None
         status, status_class = _status(difference, previous is not None) if latest else ("لا توجد قراءة", "empty")
-        rows.append({"number": number, "equipment_id": equipment.id, "type": equipment.equipment_type.name if equipment.equipment_type else "—", "model": equipment.equipment_model.name if equipment.equipment_model else "—", "registration": equipment.registration_number or equipment.asset_code or "—", "location": "—", "unit": "كم" if unit_code == "km" else "ساعة عمل", "unit_code": unit_code, "date": latest.reading_date.strftime("%d/%m/%Y") if latest else "—", "reading": _fmt(_value(latest, unit_code)), "difference": _fmt_difference(difference), "note": latest.notes if latest and latest.notes else "—", "status": status, "status_class": status_class})
+        rows.append({"number": number, "equipment_id": equipment.id, "model": equipment.equipment_model.name if equipment.equipment_model else "—", "registration": equipment.registration_number or equipment.asset_code or "—", "location": "—", "unit": "كم" if unit_code == "km" else "ساعة عمل", "unit_code": unit_code, "date": latest.reading_date.strftime("%d/%m/%Y") if latest else "—", "reading": _fmt(_value(latest, unit_code)), "difference": _fmt_difference(difference), "note": latest.notes if latest and latest.notes else "—", "status": status, "status_class": status_class})
     last_update = db.query(func.max(MeterReading.reading_date)).scalar()
     last_update_text = last_update.strftime("%d/%m/%Y") if last_update else "—"
     pages = (total + page_size - 1) // page_size if total else 1
@@ -209,15 +207,26 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         if not isinstance(reading_date, datetime):
             errors.append(f"الصف {index}: تاريخ القراءة غير صحيح.")
             continue
+        unit_code = _unit(equipment)
+        km_value = row.get("km_value")
+        hours_value = row.get("hours_value")
+        legacy_value = row.get("value")
+        raw_value = km_value if unit_code == "km" else hours_value
+        if raw_value is None or str(raw_value).strip() == "":
+            if legacy_value is not None and str(legacy_value).strip() != "":
+                raw_value = legacy_value
+            else:
+                expected = "الكيلومترات" if unit_code == "km" else "الساعات"
+                errors.append(f"الصف {index}: يجب إدخال قيمة {expected} لهذا العتاد.")
+                continue
         try:
-            value = Decimal(str(row.get("value")).replace(",", "").strip())
+            value = Decimal(str(raw_value).replace(",", "").strip())
         except Exception:
             errors.append(f"الصف {index}: قيمة العداد غير صحيحة.")
             continue
         if value < 0:
             errors.append(f"الصف {index}: قيمة العداد لا يمكن أن تكون سالبة.")
             continue
-        unit_code = _unit(equipment)
         db.add(MeterReading(equipment_id=equipment.id, reading_date=reading_date, odometer=value if unit_code == "km" else None, hours=value if unit_code == "hours" else None, source="import", notes=(str(row.get("notes") or "").strip()[:300] or None)))
         affected[equipment.id] = equipment
         created += 1
