@@ -14,6 +14,7 @@ class MeterReadingOperation(Base):
     total_rows = Column(Integer, nullable=False, default=0)
     accepted_rows = Column(Integer, nullable=False, default=0)
     rejected_rows = Column(Integer, nullable=False, default=0)
+    reading_ids = Column(JSON, nullable=False, default=list)
     rolled_back_at = Column(DateTime, nullable=True)
     rolled_back_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
