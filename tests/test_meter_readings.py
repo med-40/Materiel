@@ -12,7 +12,7 @@ from app.database.base import Base
 from app.modules.equipment.models import Equipment
 from app.modules.equipment_types.models import EquipmentModel, EquipmentType
 from app.modules.meter_readings import services
-from app.modules.meter_readings.audit import MeterReadingOperation, MeterReadingOperationEvent
+from app.modules.meter_readings.audit import MeterReadingOperation, MeterReadingOperationEvent, MeterReadingChange
 from app.modules.meter_readings.models import MeterReading
 from app.modules.meter_readings.router import meter_readings_import_excel
 from app.modules.users.models import User
@@ -82,6 +82,29 @@ def test_manual_reading_and_monotonic_validation(db):
     with pytest.raises(ValueError, match="تاريخ مستقبلي"):
         services.create_reading(db, equipment.id, odometer=125, reading_date=datetime.utcnow() + timedelta(days=1))
     assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
+
+
+def test_meter_change_history_records_old_and_new_values(db):
+    equipment = seed_equipment(db, "356", "km")
+    reading = services.create_reading(db, equipment.id, odometer=100, reading_date=datetime(2026, 8, 10))
+    db.query(MeterReadingChange).filter(MeterReadingChange.reading_id == reading.id).delete(synchronize_session=False)
+    db.flush()
+
+    reading.odometer = 120
+    db.commit()
+
+    change = (
+        db.query(MeterReadingChange)
+        .filter(MeterReadingChange.reading_id == reading.id, MeterReadingChange.action == "update")
+        .order_by(MeterReadingChange.id.desc())
+        .first()
+    )
+    assert change is not None
+    assert float(change.old_value) == 100.0
+    assert float(change.new_value) == 120.0
+    assert change.unit == "km"
+    assert change.equipment_id == equipment.id
+    assert change.reading_date == reading.reading_date
 
 
 def test_bulk_import_saves_valid_rows_skips_invalid_rows_and_blank_is_zero(db):
