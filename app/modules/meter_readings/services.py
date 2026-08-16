@@ -190,11 +190,11 @@ def history_rows(db: Session, equipment_id: int, page: int = 1, page_size: int =
     page = max(1, page)
     page_size = min(max(1, page_size), 100)
     unit_code = _unit(equipment)
-    ordered = db.query(MeterReading.id.label("id"), MeterReading.reading_date.label("reading_date"), MeterReading.odometer.label("odometer"), MeterReading.hours.label("hours"), MeterReading.notes.label("notes"), func.lag(MeterReading.odometer).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_odometer"), func.lag(MeterReading.hours).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_hours")).filter(MeterReading.equipment_id == equipment_id).subquery()
+    ordered = db.query(MeterReading.id.label("id"), MeterReading.reading_date.label("reading_date"), MeterReading.odometer.label("odometer"), MeterReading.hours.label("hours"), MeterReading.notes.label("notes"), func.lag(MeterReading.odometer).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.desc(), MeterReading.id.desc())).label("previous_odometer"), func.lag(MeterReading.hours).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.desc(), MeterReading.id.desc())).label("previous_hours")).filter(MeterReading.equipment_id == equipment_id).subquery()
     total = db.query(func.count()).select_from(ordered).scalar() or 0
     pages = max(1, (total + page_size - 1) // page_size)
     page = min(page, pages)
-    rows_data = db.query(ordered).order_by(ordered.c.reading_date.asc(), ordered.c.id.asc()).offset((page - 1) * page_size).limit(page_size).all()
+    rows_data = db.query(ordered).order_by(ordered.c.reading_date.desc(), ordered.c.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
     equipment_status, status_class = _equipment_status_label(equipment)
     rows = []
     for number, row in enumerate(rows_data, start=(page - 1) * page_size + 1):
