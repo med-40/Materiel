@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta
 from io import BytesIO
 
+import pytest
 from openpyxl import Workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi import UploadFile
 
-# Import all mapped models before create_all so every foreign key is registered.
 from app.database.base import Base
 from app.modules.users.models import User
 from app.modules.equipment_types.models import EquipmentType, EquipmentModel
@@ -15,9 +15,6 @@ from app.modules.equipment.models import Equipment
 from app.modules.meter_readings.models import MeterReading
 from app.modules.meter_readings import services
 from app.modules.meter_readings.router import meter_readings_import_excel
-from app.modules.meter_readings.batches import MeterReadingBatch
-from app.modules.meter_readings.audit import MeterReadingOperation, MeterReadingOperationEvent
-
 
 engine = create_engine(
     "sqlite:///:memory:",
@@ -28,8 +25,15 @@ TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base.metadata.create_all(engine)
 
 
-def make_session():
-    return TestingSession()
+@pytest.fixture()
+def db():
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    session = TestingSession()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def seed_equipment(db, registration="688", unit="km"):
@@ -50,8 +54,7 @@ def seed_equipment(db, registration="688", unit="km"):
     return equipment
 
 
-def test_manual_reading_and_monotonic_validation():
-    db = make_session()
+def test_manual_reading_and_monotonic_validation(db):
     equipment = seed_equipment(db)
     base = datetime(2026, 8, 10)
 
@@ -62,32 +65,20 @@ def test_manual_reading_and_monotonic_validation():
     assert second.odometer == 120
     assert equipment.operational_status == "unavailable"
 
-    try:
+    with pytest.raises(ValueError, match="أقل من القراءة المسجلة"):
         services.create_reading(db, equipment.id, odometer=110, reading_date=base + timedelta(days=2))
-        assert False, "lower reading should be rejected"
-    except ValueError as exc:
-        assert "أقل من القراءة المسجلة" in str(exc)
-        assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
+    assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
 
-    try:
+    with pytest.raises(ValueError, match="أكبر من القراءة اللاحقة"):
         services.create_reading(db, equipment.id, odometer=130, reading_date=base - timedelta(days=1))
-        assert False, "older larger reading should be rejected"
-    except ValueError as exc:
-        assert "أكبر من القراءة اللاحقة" in str(exc)
-        assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
+    assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
 
-    try:
+    with pytest.raises(ValueError, match="تاريخ مستقبلي"):
         services.create_reading(db, equipment.id, odometer=125, reading_date=datetime.utcnow() + timedelta(days=1))
-        assert False, "future reading should be rejected"
-    except ValueError as exc:
-        assert "تاريخ مستقبلي" in str(exc)
-        assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
-    finally:
-        db.close()
+    assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
 
 
-def test_bulk_import_saves_valid_rows_skips_invalid_rows_and_blank_is_zero():
-    db = make_session()
+def test_bulk_import_saves_valid_rows_skips_invalid_rows_and_blank_is_zero(db):
     equipment = seed_equipment(db, "688")
     base = datetime(2026, 8, 10)
     services.create_reading(db, equipment.id, odometer=100, reading_date=base)
@@ -108,16 +99,13 @@ def test_bulk_import_saves_valid_rows_skips_invalid_rows_and_blank_is_zero():
     saved = db.query(MeterReading).filter(MeterReading.id.in_(reading_ids)).order_by(MeterReading.reading_date).all()
     assert [float(x.odometer) for x in saved] == [120.0, 0.0]
     assert equipment.operational_status == "unavailable"
-    db.close()
 
 
-def test_excel_arabic_headers_in_reverse_order_and_blank_value_are_accepted():
-    db = make_session()
+def test_excel_arabic_headers_in_reverse_order_and_blank_value_are_accepted(db):
     equipment = seed_equipment(db, "688")
 
     wb = Workbook()
     ws = wb.active
-    # Deliberately reverse the normal order and use Arabic headers.
     ws.append(["الملاحظات", "الساعات", "رقم التسجيل", "التاريخ", "الكيلومترات"])
     ws.append(["قراءة سليمة", None, "688", "15/08/2026", 333])
     ws.append(["قراءة صفرية", None, "688", "16/08/2026", None])
@@ -140,11 +128,9 @@ def test_excel_arabic_headers_in_reverse_order_and_blank_value_are_accepted():
     assert len(readings) == 2
     assert float(readings[0].odometer) == 333.0
     assert float(readings[1].odometer) == 0.0
-    db.close()
 
 
-def test_operation_rollback_removes_only_its_readings():
-    db = make_session()
+def test_operation_rollback_removes_only_its_readings(db):
     equipment = seed_equipment(db, "688")
     base = datetime(2026, 8, 10)
     permanent = services.create_reading(db, equipment.id, odometer=100, reading_date=base)
@@ -162,4 +148,3 @@ def test_operation_rollback_removes_only_its_readings():
     assert db.query(MeterReading).filter(MeterReading.id == permanent.id).count() == 1
     assert db.query(MeterReading).filter(MeterReading.id.in_(ids)).count() == 0
     assert op.status == "rolled_back"
-    db.close()
