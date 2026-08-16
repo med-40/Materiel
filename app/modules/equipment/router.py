@@ -105,10 +105,13 @@ def equipment_delete_form(
 def equipment_meters_page(
     equipment_id: int,
     request: Request,
+    page: int = 1,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    item, readings = meter_services.history_rows(db, equipment_id)
+    item, readings, total_readings, total_pages, current_page = meter_services.history_rows(
+        db, equipment_id, page=page, page_size=20
+    )
 
     if not item:
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
@@ -119,6 +122,9 @@ def equipment_meters_page(
             "request": request,
             "item": item,
             "readings": readings,
+            "total_readings": total_readings,
+            "total_pages": total_pages,
+            "current_page": current_page,
             "user": current_user,
         },
     )
