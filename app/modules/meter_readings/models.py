@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String, event, func, select
+from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String, event, func, select, insert
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
 from app.modules.equipment.models import Equipment
+from app.modules.meter_readings.audit import MeterReadingChange
 
 
 class MeterReading(Base):
@@ -32,12 +33,49 @@ def _validate_meter_reading(mapper, connection, target):
         target.updated_at = now
     if target.reading_date is not None and target.reading_date.date() > now.date():
         raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي.")
-
-    # هذه الخانة تعني حالة العداد وقت تسجيل القراءة.
-    # حالة العداد الحالية هي المرجع البصري في الجداول: عند "لا يعمل"
-    # يظهر العتاد وقراءاتُه باللون الأحمر إلى أن يعاد إلى "يعمل".
-    status = connection.execute(
-        select(Equipment.operational_status).where(Equipment.id == target.equipment_id)
-    ).scalar_one_or_none()
+    status = connection.execute(select(Equipment.operational_status).where(Equipment.id == target.equipment_id)).scalar_one_or_none()
     if status:
         target.equipment_status = status
+
+
+@event.listens_for(MeterReading, "after_insert")
+def _audit_meter_insert(mapper, connection, target):
+    unit = "km" if target.odometer is not None else "hours"
+    value = target.odometer if unit == "km" else target.hours
+    connection.execute(insert(MeterReadingChange.__table__).values(
+        reading_id=target.id,
+        equipment_id=target.equipment_id,
+        changed_at=datetime.utcnow(),
+        action="add",
+        source=target.source or "manual",
+        reading_date=target.reading_date,
+        unit=unit,
+        old_value=None,
+        new_value=value,
+        details="إضافة قراءة جديدة إلى النظام.",
+    ))
+
+
+@event.listens_for(MeterReading, "after_update")
+def _audit_meter_update(mapper, connection, target):
+    from sqlalchemy import inspect
+    state = inspect(target)
+    unit = "km" if target.odometer is not None else "hours"
+    attr = "odometer" if unit == "km" else "hours"
+    history = state.attrs[attr].history
+    if not history.has_changes():
+        return
+    old_value = history.deleted[0] if history.deleted else None
+    new_value = history.added[0] if history.added else None
+    connection.execute(insert(MeterReadingChange.__table__).values(
+        reading_id=target.id,
+        equipment_id=target.equipment_id,
+        changed_at=datetime.utcnow(),
+        action="update",
+        source=target.source or "manual",
+        reading_date=target.reading_date,
+        unit=unit,
+        old_value=old_value,
+        new_value=new_value,
+        details="تعديل قيمة قراءة مسجلة.",
+    ))
