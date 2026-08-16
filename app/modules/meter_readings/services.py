@@ -71,24 +71,14 @@ def normalize_registration(value) -> str:
 
 
 def list_readings(db: Session, equipment_id: int) -> list[MeterReading]:
-    return (
-        db.query(MeterReading)
-        .filter(MeterReading.equipment_id == equipment_id)
-        .order_by(MeterReading.reading_date.asc(), MeterReading.id.asc())
-        .all()
-    )
+    return db.query(MeterReading).filter(MeterReading.equipment_id == equipment_id).order_by(MeterReading.reading_date.asc(), MeterReading.id.asc()).all()
 
 
 def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: str = "", type_id: Optional[int] = None, unit: str = "", sort: str = "date_desc"):
     page = max(1, page)
     page_size = min(max(1, page_size), 100)
     latest_dates = db.query(MeterReading.equipment_id.label("equipment_id"), func.max(MeterReading.reading_date).label("latest_date")).group_by(MeterReading.equipment_id).subquery()
-    query = (
-        db.query(Equipment, latest_dates.c.latest_date)
-        .join(EquipmentType, Equipment.equipment_type_id == EquipmentType.id)
-        .outerjoin(latest_dates, latest_dates.c.equipment_id == Equipment.id)
-        .options(joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model))
-    )
+    query = db.query(Equipment, latest_dates.c.latest_date).join(EquipmentType, Equipment.equipment_type_id == EquipmentType.id).outerjoin(latest_dates, latest_dates.c.equipment_id == Equipment.id).options(joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model))
     if type_id:
         query = query.filter(Equipment.equipment_type_id == type_id)
     if unit in {"km", "hours"}:
@@ -137,11 +127,7 @@ def history_rows(db: Session, equipment_id: int, page: int = 1, page_size: int =
     page = max(1, page)
     page_size = min(max(1, page_size), 100)
     unit_code = _unit(equipment)
-    ordered = db.query(
-        MeterReading.id.label("id"), MeterReading.reading_date.label("reading_date"), MeterReading.odometer.label("odometer"), MeterReading.hours.label("hours"), MeterReading.notes.label("notes"),
-        func.lag(MeterReading.odometer).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_odometer"),
-        func.lag(MeterReading.hours).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_hours"),
-    ).filter(MeterReading.equipment_id == equipment_id).subquery()
+    ordered = db.query(MeterReading.id.label("id"), MeterReading.reading_date.label("reading_date"), MeterReading.odometer.label("odometer"), MeterReading.hours.label("hours"), MeterReading.notes.label("notes"), func.lag(MeterReading.odometer).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_odometer"), func.lag(MeterReading.hours).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_hours")).filter(MeterReading.equipment_id == equipment_id).subquery()
     total = db.query(func.count()).select_from(ordered).scalar() or 0
     pages = max(1, (total + page_size - 1) // page_size)
     page = min(page, pages)
@@ -190,46 +176,77 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         return 0, 0, []
     equipment_list = db.query(Equipment).options(joinedload(Equipment.equipment_type)).filter(Equipment.registration_number.isnot(None)).all()
     equipment_map = {normalize_registration(item.registration_number): item for item in equipment_list if normalize_registration(item.registration_number)}
-    created = 0
     errors = []
-    affected = {}
+    prepared = []
+
     for index, row in enumerate(clean_rows, start=1):
+        row_number = row.get("_row_number", index)
         registration_raw = row.get("registration")
         registration = normalize_registration(registration_raw)
         if not registration:
-            errors.append(f"الصف {index}: رقم التسجيل فارغ.")
+            errors.append(f"الصف {row_number}: رقم التسجيل فارغ.")
             continue
         equipment = equipment_map.get(registration)
         if not equipment:
-            errors.append(f"الصف {index}: رقم التسجيل {registration_raw} غير موجود.")
+            errors.append(f"الصف {row_number}: رقم التسجيل {registration_raw} غير موجود في النظام.")
             continue
         reading_date = row.get("reading_date")
         if not isinstance(reading_date, datetime):
-            errors.append(f"الصف {index}: تاريخ القراءة غير صحيح.")
+            errors.append(f"الصف {row_number}: تاريخ القراءة غير صحيح.")
             continue
+
         unit_code = _unit(equipment)
         km_value = row.get("km_value")
         hours_value = row.get("hours_value")
         legacy_value = row.get("value")
-        raw_value = km_value if unit_code == "km" else hours_value
-        if raw_value is None or str(raw_value).strip() == "":
-            if legacy_value is not None and str(legacy_value).strip() != "":
-                raw_value = legacy_value
-            else:
-                expected = "الكيلومترات" if unit_code == "km" else "الساعات"
-                errors.append(f"الصف {index}: يجب إدخال قيمة {expected} لهذا العتاد.")
+        has_km = km_value is not None and str(km_value).strip() != ""
+        has_hours = hours_value is not None and str(hours_value).strip() != ""
+
+        if has_km and has_hours:
+            expected = "الكيلومترات" if unit_code == "km" else "الساعات"
+            other = "الساعات" if unit_code == "km" else "الكيلومترات"
+            errors.append(f"الصف {row_number}: تم إدخال الكيلومترات والساعات معًا. هذا العتاد يعمل بعداد {expected} فقط، اترك عمود {other} فارغًا.")
+            continue
+
+        if has_km or has_hours:
+            if unit_code == "km" and not has_km:
+                errors.append(f"الصف {row_number}: العتاد {registration_raw} يعمل بالكيلومترات، لكن تم إدخال الساعات. ضع القيمة في عمود الكيلومترات واترك الساعات فارغة.")
                 continue
+            if unit_code == "hours" and not has_hours:
+                errors.append(f"الصف {row_number}: العتاد {registration_raw} يعمل بالساعات، لكن تم إدخال الكيلومترات. ضع القيمة في عمود الساعات واترك الكيلومترات فارغة.")
+                continue
+            raw_value = km_value if unit_code == "km" else hours_value
+        else:
+            if legacy_value is None or str(legacy_value).strip() == "":
+                expected = "الكيلومترات" if unit_code == "km" else "الساعات"
+                errors.append(f"الصف {row_number}: يجب إدخال قيمة {expected} لهذا العتاد.")
+                continue
+            raw_value = legacy_value
+
         try:
             value = Decimal(str(raw_value).replace(",", "").strip())
         except Exception:
-            errors.append(f"الصف {index}: قيمة العداد غير صحيحة.")
+            errors.append(f"الصف {row_number}: قيمة العداد غير صحيحة.")
             continue
         if value < 0:
-            errors.append(f"الصف {index}: قيمة العداد لا يمكن أن تكون سالبة.")
+            errors.append(f"الصف {row_number}: قيمة العداد لا يمكن أن تكون سالبة.")
             continue
-        db.add(MeterReading(equipment_id=equipment.id, reading_date=reading_date, odometer=value if unit_code == "km" else None, hours=value if unit_code == "hours" else None, source="import", notes=(str(row.get("notes") or "").strip()[:300] or None)))
+
+        prepared.append({"equipment": equipment, "reading_date": reading_date, "value": value, "notes": str(row.get("notes") or "").strip()[:300] or None})
+
+    # الاستيراد واللصق يعملان كوحدة واحدة: إذا وجد خطأ لا نحفظ أي صف.
+    if errors:
+        db.rollback()
+        return 0, len(clean_rows), errors
+
+    affected = {}
+    for item in prepared:
+        equipment = item["equipment"]
+        unit_code = _unit(equipment)
+        db.add(MeterReading(equipment_id=equipment.id, reading_date=item["reading_date"], odometer=item["value"] if unit_code == "km" else None, hours=item["value"] if unit_code == "hours" else None, source="import", notes=item["notes"]))
         affected[equipment.id] = equipment
-        created += 1
+
+    created = len(prepared)
     if created:
         db.flush()
         for equipment in affected.values():
@@ -239,6 +256,4 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
             else:
                 equipment.current_hours = _value(latest, "hours")
         db.commit()
-    else:
-        db.rollback()
-    return created, len(clean_rows) - created, errors
+    return created, 0, []
