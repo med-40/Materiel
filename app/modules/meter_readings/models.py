@@ -4,6 +4,7 @@ from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String, e
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
+from app.modules.equipment.models import Equipment
 
 
 class MeterReading(Base):
@@ -32,13 +33,11 @@ def _validate_meter_reading(mapper, connection, target):
     if target.reading_date is not None and target.reading_date.date() > now.date():
         raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي.")
 
-    # حالة القراءة تسجل حالة العداد في لحظة إدخالها، وليس "حالة القراءة".
-    # إذا لم ترسل الخدمة حالة صريحة، نأخذ الحالة الحالية للعتاد.
-    if not target.equipment_status:
-        target.equipment_status = connection.execute(
-            select("operational_status").select_from(
-                __import__("app.modules.equipment.models", fromlist=["Equipment"]).Equipment.__table__
-            ).where(
-                __import__("app.modules.equipment.models", fromlist=["Equipment"]).Equipment.id == target.equipment_id
-            )
-        ).scalar() or "available"
+    # هذه الخانة تعني حالة العداد وقت تسجيل القراءة.
+    # حالة العداد الحالية هي المرجع البصري في الجداول: عند "لا يعمل"
+    # يظهر العتاد وقراءاتُه باللون الأحمر إلى أن يعاد إلى "يعمل".
+    status = connection.execute(
+        select(Equipment.operational_status).where(Equipment.id == target.equipment_id)
+    ).scalar_one_or_none()
+    if status:
+        target.equipment_status = status
