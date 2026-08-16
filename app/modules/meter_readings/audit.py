@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text, Numeric
 from app.database.base import Base
 
 
@@ -34,3 +34,21 @@ class MeterReadingOperationEvent(Base):
     created_at = Column(DateTime, nullable=False, default=utc_now)
     details = Column(Text, nullable=True)
     payload = Column(JSON, nullable=True)
+
+
+class MeterReadingChange(Base):
+    """Immutable business-level history of an actual meter-data change."""
+    __tablename__ = "meter_reading_changes"
+    id = Column(Integer, primary_key=True, index=True)
+    reading_id = Column(Integer, ForeignKey("meter_readings.id", ondelete="SET NULL"), nullable=True, index=True)
+    equipment_id = Column(Integer, ForeignKey("equipment.id", ondelete="SET NULL"), nullable=True, index=True)
+    operation_id = Column(Integer, ForeignKey("meter_reading_operations.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    changed_at = Column(DateTime, nullable=False, default=utc_now, index=True)
+    action = Column(String(30), nullable=False, default="update")
+    source = Column(String(30), nullable=False, default="manual")
+    reading_date = Column(DateTime, nullable=True)
+    unit = Column(String(20), nullable=False, default="hours")
+    old_value = Column(Numeric(10, 1), nullable=True)
+    new_value = Column(Numeric(10, 1), nullable=True)
+    details = Column(Text, nullable=True)
