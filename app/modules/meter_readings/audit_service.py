@@ -7,7 +7,16 @@ from app.modules.meter_readings.audit import MeterReadingOperation, MeterReading
 from app.modules.meter_readings.models import MeterReading
 
 
-def create_operation(db: Session, kind: str, user_id=None, equipment_id=None, filename=None, total_rows=0, reading_ids=None, rejected_rows=0):
+def create_operation(
+    db: Session,
+    kind: str,
+    user_id=None,
+    equipment_id=None,
+    filename=None,
+    total_rows=0,
+    reading_ids=None,
+    rejected_rows=0,
+):
     ids = [int(x) for x in (reading_ids or [])]
     op = MeterReadingOperation(
         kind=kind,
@@ -23,7 +32,19 @@ def create_operation(db: Session, kind: str, user_id=None, equipment_id=None, fi
     db.add(op)
     db.flush()
     add_event(db, op.id, 'created', user_id, 'تم إنشاء عملية الإدخال.')
-    add_event(db, op.id, 'completed', user_id, f'تمت العملية: {len(ids)} مقبولة و{rejected_rows} مرفوضة.')
+    add_event(
+        db,
+        op.id,
+        'completed',
+        user_id,
+        f'تمت العملية: {len(ids)} مقبولة و{rejected_rows} مرفوضة من أصل {total_rows}.',
+        payload={
+            'total_rows': total_rows,
+            'accepted_rows': len(ids),
+            'rejected_rows': rejected_rows,
+            'reading_ids': ids,
+        },
+    )
     return op
 
 
@@ -38,6 +59,23 @@ def add_event(db: Session, operation_id, event_type, actor_id, details, payload=
     db.add(event)
     db.flush()
     return event
+
+
+def add_validation_details(db: Session, operation_id, actor_id, errors=None, warnings=None):
+    errors = list(errors or [])
+    warnings = list(warnings or [])
+    if errors:
+        add_event(
+            db, operation_id, 'validation_errors', actor_id,
+            f'تم رفض {len(errors)} صف/صفوف بسبب أخطاء في البيانات.',
+            payload={'errors': errors},
+        )
+    if warnings:
+        add_event(
+            db, operation_id, 'warnings', actor_id,
+            f'تم تسجيل {len(warnings)} تنبيهًا دون منع الإدخال.',
+            payload={'warnings': warnings},
+        )
 
 
 def _refresh_equipment_after_rollback(db: Session, equipment_ids):
