@@ -1,3 +1,5 @@
+from sqlalchemy import inspect, text
+
 from app.database.base import Base
 from app.database.session import engine
 from app.modules.meter_readings import models as meter_models  # noqa: F401
@@ -9,8 +11,34 @@ from app.modules.equipment_types import models as equipment_types_models  # noqa
 from app.modules.equipment import models as equipment_models  # noqa: F401
 from app.modules.meter_readings import models as meter_readings_models  # noqa: F401
 
+
+def _repair_existing_meter_readings_schema() -> None:
+    """إصلاح بسيط للمخطط القديم عند استخدام SQLite.
+
+    create_all() لا يضيف أعمدة إلى جدول موجود. النسخ القديمة من قاعدة البيانات
+    قد لا تحتوي updated_at، ولذلك كانت القراءة تفشل برسالة NOT NULL constraint.
+    """
+    if not str(engine.url).startswith("sqlite"):
+        return
+    inspector = inspect(engine)
+    if "meter_readings" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("meter_readings")}
+    if "updated_at" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE meter_readings ADD COLUMN updated_at DATETIME"
+            ))
+            connection.execute(text(
+                "UPDATE meter_readings SET updated_at = COALESCE(created_at, CURRENT_TIMESTAMP) "
+                "WHERE updated_at IS NULL"
+            ))
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _repair_existing_meter_readings_schema()
+
 
 def create_default_admin() -> None:
     from app.database.session import SessionLocal
