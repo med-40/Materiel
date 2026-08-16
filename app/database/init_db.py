@@ -2,6 +2,8 @@ from app.database.base import Base
 from app.database.session import engine
 from app.modules.meter_readings import models as meter_models  # noqa: F401
 from app.modules.meter_readings import batches as meter_batches  # noqa: F401
+from app.modules.meter_readings import audit as meter_audit  # noqa: F401
+from app.modules.meter_readings import audit_events as meter_audit_events  # noqa: F401
 from app.modules.users import models as users_models  # noqa: F401
 from app.modules.equipment_types import models as equipment_types_models  # noqa: F401
 from app.modules.equipment import models as equipment_models  # noqa: F401
