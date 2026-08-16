@@ -149,9 +149,7 @@ def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: st
         query = query.filter(EquipmentType.measurement_unit == unit)
     if search.strip():
         term = f"%{search.strip()}%"
-        query = query.filter(
-            or_(Equipment.asset_code.ilike(term), Equipment.registration_number.ilike(term), Equipment.vin.ilike(term), EquipmentType.name.ilike(term))
-        )
+        query = query.filter(or_(Equipment.asset_code.ilike(term), Equipment.registration_number.ilike(term), Equipment.vin.ilike(term), EquipmentType.name.ilike(term)))
     total = query.count()
     if sort == "registration":
         query = query.order_by(Equipment.registration_number.asc(), Equipment.id.asc())
@@ -163,12 +161,7 @@ def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: st
     equipment_ids = [equipment.id for equipment, _ in selected]
     history = {equipment_id: [] for equipment_id in equipment_ids}
     if equipment_ids:
-        readings = (
-            db.query(MeterReading)
-            .filter(MeterReading.equipment_id.in_(equipment_ids))
-            .order_by(MeterReading.equipment_id.asc(), MeterReading.reading_date.desc(), MeterReading.id.desc())
-            .all()
-        )
+        readings = db.query(MeterReading).filter(MeterReading.equipment_id.in_(equipment_ids)).order_by(MeterReading.equipment_id.asc(), MeterReading.reading_date.desc(), MeterReading.id.desc()).all()
         for reading in readings:
             bucket = history[reading.equipment_id]
             if len(bucket) < 2:
@@ -180,16 +173,7 @@ def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: st
         previous = history[equipment.id][1] if len(history[equipment.id]) > 1 else None
         difference = _difference(latest, previous, unit_code) if latest else None
         equipment_status, status_class = _equipment_status_label(equipment)
-        rows.append({
-            "number": number, "equipment_id": equipment.id,
-            "model": equipment.equipment_model.name if equipment.equipment_model else "—",
-            "type_name": equipment.equipment_type.name if equipment.equipment_type else "—",
-            "registration": equipment.registration_number or equipment.asset_code or "—",
-            "location": "—", "unit": "كم" if unit_code == "km" else "ساعة عمل", "unit_code": unit_code,
-            "date": latest.reading_date.strftime("%d/%m/%Y") if latest else "—",
-            "reading": _fmt(_value(latest, unit_code)), "difference": _fmt_difference(difference),
-            "note": latest.notes if latest and latest.notes else "—", "status": equipment_status, "status_class": status_class,
-        })
+        rows.append({"number": number, "equipment_id": equipment.id, "model": equipment.equipment_model.name if equipment.equipment_model else "—", "type_name": equipment.equipment_type.name if equipment.equipment_type else "—", "registration": equipment.registration_number or equipment.asset_code or "—", "location": "—", "unit": "كم" if unit_code == "km" else "ساعة عمل", "unit_code": unit_code, "date": latest.reading_date.strftime("%d/%m/%Y") if latest else "—", "reading": _fmt(_value(latest, unit_code)), "difference": _fmt_difference(difference), "note": latest.notes if latest and latest.notes else "—", "status": equipment_status, "status_class": status_class})
     last_update = db.query(func.max(MeterReading.reading_date)).scalar()
     last_update_text = last_update.strftime("%d/%m/%Y") if last_update else "—"
     pages = (total + page_size - 1) // page_size if total else 1
@@ -197,11 +181,7 @@ def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: st
 
 
 def get_equipment_with_readings(db: Session, equipment_id: int):
-    return (
-        db.query(Equipment)
-        .options(joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model))
-        .filter(Equipment.id == equipment_id).first()
-    )
+    return db.query(Equipment).options(joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model)).filter(Equipment.id == equipment_id).first()
 
 
 def history_rows(db: Session, equipment_id: int, page: int = 1, page_size: int = 20):
@@ -211,14 +191,7 @@ def history_rows(db: Session, equipment_id: int, page: int = 1, page_size: int =
     page = max(1, page)
     page_size = min(max(1, page_size), 100)
     unit_code = _unit(equipment)
-    ordered = (
-        db.query(
-            MeterReading.id.label("id"), MeterReading.reading_date.label("reading_date"),
-            MeterReading.odometer.label("odometer"), MeterReading.hours.label("hours"), MeterReading.notes.label("notes"),
-            func.lag(MeterReading.odometer).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_odometer"),
-            func.lag(MeterReading.hours).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_hours"),
-        ).filter(MeterReading.equipment_id == equipment_id).subquery()
-    )
+    ordered = db.query(MeterReading.id.label("id"), MeterReading.reading_date.label("reading_date"), MeterReading.odometer.label("odometer"), MeterReading.hours.label("hours"), MeterReading.notes.label("notes"), func.lag(MeterReading.odometer).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_odometer"), func.lag(MeterReading.hours).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.asc(), MeterReading.id.asc())).label("previous_hours")).filter(MeterReading.equipment_id == equipment_id).subquery()
     total = db.query(func.count()).select_from(ordered).scalar() or 0
     pages = max(1, (total + page_size - 1) // page_size)
     page = min(page, pages)
@@ -229,12 +202,7 @@ def history_rows(db: Session, equipment_id: int, page: int = 1, page_size: int =
         current_value = row.odometer if unit_code == "km" else row.hours
         previous_value = row.previous_odometer if unit_code == "km" else row.previous_hours
         difference = Decimal(current_value) - Decimal(previous_value) if current_value is not None and previous_value is not None else None
-        rows.append({
-            "number": number, "id": row.id, "date": row.reading_date.strftime("%d/%m/%Y"),
-            "odometer": _fmt(row.odometer), "hours": _fmt(row.hours), "reading": _fmt(current_value),
-            "difference": _fmt_difference(difference), "note": row.notes or "—", "status": equipment_status,
-            "status_class": status_class, "unit": "كم" if unit_code == "km" else "ساعة عمل",
-        })
+        rows.append({"number": number, "id": row.id, "date": row.reading_date.strftime("%d/%m/%Y"), "odometer": _fmt(row.odometer), "hours": _fmt(row.hours), "reading": _fmt(current_value), "difference": _fmt_difference(difference), "note": row.notes or "—", "status": equipment_status, "status_class": status_class, "unit": "كم" if unit_code == "km" else "ساعة عمل"})
     return equipment, rows, total, pages, page
 
 
@@ -254,12 +222,7 @@ def create_reading(db: Session, equipment_id: int, odometer=None, hours=None, re
         raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي. اختر تاريخ اليوم أو تاريخًا سابقًا.")
     _validate_reading_position(db, equipment_id, date_value, value, unit_code)
     equipment.operational_status = normalize_equipment_status(equipment_status)
-    reading = MeterReading(
-        equipment_id=equipment_id, reading_date=date_value,
-        odometer=value if unit_code == "km" else None,
-        hours=value if unit_code == "hours" else None,
-        source="manual", notes=(notes or "").strip()[:300] or None,
-    )
+    reading = MeterReading(equipment_id=equipment_id, reading_date=date_value, odometer=value if unit_code == "km" else None, hours=value if unit_code == "hours" else None, source="manual", notes=(notes or "").strip()[:300] or None)
     db.add(reading)
     db.flush()
     _refresh_equipment_current(db, equipment, unit_code)
@@ -279,14 +242,8 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
     if not clean_rows:
         return 0, 0, [], [], []
 
-    equipment_list = (
-        db.query(Equipment).options(joinedload(Equipment.equipment_type))
-        .filter(Equipment.registration_number.isnot(None)).all()
-    )
-    equipment_map = {
-        normalize_registration(item.registration_number): item
-        for item in equipment_list if normalize_registration(item.registration_number)
-    }
+    equipment_list = db.query(Equipment).options(joinedload(Equipment.equipment_type)).filter(Equipment.registration_number.isnot(None)).all()
+    equipment_map = {normalize_registration(item.registration_number): item for item in equipment_list if normalize_registration(item.registration_number)}
     errors: list[str] = []
     warnings: list[str] = []
     candidates: list[dict] = []
@@ -333,11 +290,10 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         else:
             raw_value = legacy_value
 
-        if raw_value is None or str(raw_value).strip() == "":
+        blank_value = raw_value is None or str(raw_value).strip() == ""
+        if blank_value:
             value = Decimal("0")
-            warnings.append(
-                f"الصف {row_number}: لم توجد قيمة للعداد للعتاد {registration_raw} بتاريخ {reading_date:%d/%m/%Y}؛ تم اعتبار القراءة صفرًا."
-            )
+            warnings.append(f"الصف {row_number}: لم توجد قيمة للعداد للعتاد {registration_raw} بتاريخ {reading_date:%d/%m/%Y}؛ تم اعتبار القراءة صفرًا.")
         else:
             try:
                 value = _parse_decimal(raw_value)
@@ -349,13 +305,12 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
             continue
         candidates.append({
             "equipment": equipment, "reading_date": reading_date, "value": value,
+            "blank_value": blank_value,
             "notes": str(row.get("notes") or "").strip()[:300] or None,
             "equipment_status": normalize_equipment_status(row.get("equipment_status", "available")),
             "_row_number": row_number,
         })
 
-    # Validate each candidate against existing readings and other candidates.
-    # Only the offending row is rejected; unrelated valid rows continue.
     accepted: list[dict] = []
     by_equipment: dict[int, list[dict]] = {}
     for item in candidates:
@@ -369,34 +324,36 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         for item in sorted(items, key=lambda x: (x["reading_date"], x["_row_number"])):
             value = item["value"]
             invalid_reason = None
-            comparisons = existing + [
-                MeterReading(
-                    equipment_id=equipment_id,
-                    reading_date=x["reading_date"],
-                    odometer=x["value"] if unit_code == "km" else None,
-                    hours=x["value"] if unit_code == "hours" else None,
-                )
-                for x in accepted_for_equipment
-            ]
-            for other in comparisons:
-                other_value = _value(other, unit_code)
-                if other_value is None:
-                    continue
-                other_value = Decimal(other_value)
-                if other.reading_date < item["reading_date"] and other_value > value:
-                    invalid_reason = (
-                        f"الصف {item['_row_number']}: لا يمكن حفظ القراءة بتاريخ {item['reading_date']:%d/%m/%Y}: "
-                        f"قيمتها ({value:g}) أقل من القراءة المسجلة بتاريخ {other.reading_date:%d/%m/%Y} ({other_value:g}). "
-                        "القيمة غير منطقية، ولم يتم حفظها."
+            # A blank imported value is an explicit business exception: it is
+            # stored as zero after warning, even if zero is below a prior reading.
+            if not item["blank_value"]:
+                comparisons = existing + [
+                    MeterReading(
+                        equipment_id=equipment_id, reading_date=x["reading_date"],
+                        odometer=x["value"] if unit_code == "km" else None,
+                        hours=x["value"] if unit_code == "hours" else None,
                     )
-                    break
-                if other.reading_date > item["reading_date"] and other_value < value:
-                    invalid_reason = (
-                        f"الصف {item['_row_number']}: لا يمكن إدخال قراءة قديمة بتاريخ {item['reading_date']:%d/%m/%Y}: "
-                        f"قيمتها ({value:g}) أكبر من القراءة اللاحقة بتاريخ {other.reading_date:%d/%m/%Y} ({other_value:g}). "
-                        "القراءة غير منطقية، ولم يتم حفظها."
-                    )
-                    break
+                    for x in accepted_for_equipment
+                ]
+                for other in comparisons:
+                    other_value = _value(other, unit_code)
+                    if other_value is None:
+                        continue
+                    other_value = Decimal(other_value)
+                    if other.reading_date < item["reading_date"] and other_value > value:
+                        invalid_reason = (
+                            f"الصف {item['_row_number']}: لا يمكن حفظ القراءة بتاريخ {item['reading_date']:%d/%m/%Y}: "
+                            f"قيمتها ({value:g}) أقل من القراءة المسجلة بتاريخ {other.reading_date:%d/%m/%Y} ({other_value:g}). "
+                            "القيمة غير منطقية، ولم يتم حفظها."
+                        )
+                        break
+                    if other.reading_date > item["reading_date"] and other_value < value:
+                        invalid_reason = (
+                            f"الصف {item['_row_number']}: لا يمكن إدخال قراءة قديمة بتاريخ {item['reading_date']:%d/%m/%Y}: "
+                            f"قيمتها ({value:g}) أكبر من القراءة اللاحقة بتاريخ {other.reading_date:%d/%m/%Y} ({other_value:g}). "
+                            "القراءة غير منطقية، ولم يتم حفظها."
+                        )
+                        break
             if invalid_reason:
                 errors.append(invalid_reason)
             else:
@@ -409,12 +366,7 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         equipment = item["equipment"]
         unit_code = _unit(equipment)
         equipment.operational_status = item["equipment_status"]
-        reading = MeterReading(
-            equipment_id=equipment.id, reading_date=item["reading_date"],
-            odometer=item["value"] if unit_code == "km" else None,
-            hours=item["value"] if unit_code == "hours" else None,
-            source="import", notes=item["notes"],
-        )
+        reading = MeterReading(equipment_id=equipment.id, reading_date=item["reading_date"], odometer=item["value"] if unit_code == "km" else None, hours=item["value"] if unit_code == "hours" else None, source="import", notes=item["notes"])
         db.add(reading)
         db.flush()
         reading_ids.append(reading.id)
