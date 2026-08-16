@@ -13,25 +13,23 @@ from app.modules.meter_readings import models as meter_readings_models  # noqa: 
 
 
 def _repair_existing_meter_readings_schema() -> None:
-    """إصلاح بسيط للمخطط القديم عند استخدام SQLite.
-
-    create_all() لا يضيف أعمدة إلى جدول موجود. النسخ القديمة من قاعدة البيانات
-    قد لا تحتوي updated_at، ولذلك كانت القراءة تفشل برسالة NOT NULL constraint.
-    """
+    """إصلاح أعمدة أضيفت في الإصدارات الجديدة عند استخدام SQLite."""
     if not str(engine.url).startswith("sqlite"):
         return
     inspector = inspect(engine)
     if "meter_readings" not in inspector.get_table_names():
         return
     columns = {column["name"] for column in inspector.get_columns("meter_readings")}
-    if "updated_at" not in columns:
-        with engine.begin() as connection:
-            connection.execute(text(
-                "ALTER TABLE meter_readings ADD COLUMN updated_at DATETIME"
-            ))
+    with engine.begin() as connection:
+        if "updated_at" not in columns:
+            connection.execute(text("ALTER TABLE meter_readings ADD COLUMN updated_at DATETIME"))
             connection.execute(text(
                 "UPDATE meter_readings SET updated_at = COALESCE(created_at, CURRENT_TIMESTAMP) "
                 "WHERE updated_at IS NULL"
+            ))
+        if "equipment_status" not in columns:
+            connection.execute(text(
+                "ALTER TABLE meter_readings ADD COLUMN equipment_status VARCHAR(30) NOT NULL DEFAULT 'available'"
             ))
 
 
