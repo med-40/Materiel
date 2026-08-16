@@ -144,3 +144,25 @@ def test_operation_rollback_removes_only_its_readings(db):
     assert db.query(MeterReading).filter(MeterReading.id == permanent.id).count() == 1
     assert db.query(MeterReading).filter(MeterReading.id.in_(ids)).count() == 0
     assert op.status == "rolled_back"
+
+
+def test_excel_screenshot_style_headers_are_detected(db):
+    equipment = seed_equipment(db, "688", "km")
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["رقم التسجيل", "التاريخ", "عداد الكم", "عداد الساعات", "الملاحظات"])
+    ws.append(["688", "16/08/2026", 900, None, "سليم"])
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    upload = UploadFile(filename="headers.xlsx", file=buffer)
+    user = User(username="headers-tester", full_name="اختبار العناوين", hashed_password="x", role="admin")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    response = meter_readings_import_excel(upload, "available", db, user)
+    assert response.status_code == 200
+    assert b'"created":1' in response.body
+    assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 1
+    reading = db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).one()
+    assert float(reading.odometer) == 900.0

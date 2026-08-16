@@ -232,7 +232,7 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
                 "registrationnumber": "registration", "immatriculation": "registration", "matricule": "registration", "reg": "registration",
                 "التاريخ": "date", "تاريخالقراءه": "date", "تاريخالقراءة": "date", "readingdate": "date", "date": "date", "reading_date": "date",
                 "الملاحظات": "notes", "ملاحظات": "notes", "notes": "notes", "note": "notes",
-                "الكيلومترات": "km", "كيلومترات": "km", "الكلم": "km", "كلم": "km", "عدادالكلم": "km", "عدادالكيلومترات": "km", "كم": "km", "km": "km", "kilometers": "km", "kilometres": "km", "odometer": "km", "odometre": "km",
+                "الكيلومترات": "km", "كيلومترات": "km", "الكيلومتر": "km", "كيلومتر": "km", "الكم": "km", "الكلم": "km", "كلم": "km", "عدادالكلم": "km", "عدادالكيلومترات": "km", "عدادالكيلومتر": "km", "عدادالكم": "km", "كم": "km", "km": "km", "kilometers": "km", "kilometres": "km", "odometer": "km", "odometre": "km",
                 "الساعات": "hours", "ساعات": "hours", "ساعة": "hours", "عدادالساعات": "hours", "عدادساعة": "hours", "hours": "hours", "hour": "hours", "hourmeter": "hours", "hourmeterreading": "hours",
                 "القراءة": "legacy", "قيمهالعداد": "legacy", "قيمةالعداد": "legacy", "reading": "legacy", "value": "legacy", "meter": "legacy", "meterreading": "legacy",
             }
