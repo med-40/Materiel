@@ -17,6 +17,7 @@ class MeterReading(Base):
     odometer = Column(Numeric(10, 1), nullable=True)
     hours = Column(Numeric(10, 1), nullable=True)
     source = Column(String(50), nullable=False, default="manual")
+    equipment_status = Column(String(30), nullable=False, default="available", server_default="available")
     notes = Column(String(300), nullable=True)
     equipment = relationship("Equipment")
 
@@ -28,7 +29,6 @@ def _validate_meter_reading(mapper, connection, target):
         target.created_at = now
     if target.updated_at is None:
         target.updated_at = now
-    # لا يسمح النظام بتسجيل قراءة بتاريخ مستقبلي.
     if target.reading_date is not None and target.reading_date.date() > now.date():
         raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي.")
     # لا نحول القيمة الفارغة هنا إلى صفر بشكل أعمى؛ لأن وحدة العتاد
