@@ -3,6 +3,7 @@ from contextvars import ContextVar
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from app.modules.equipment.models import Equipment
 from app.modules.meter_readings.models import MeterReading
 from app.modules.meter_readings.audit import MeterReadingOperation, MeterReadingOperationEvent
 from app.database.session import SessionLocal
@@ -21,9 +22,7 @@ def _collect_meter_readings(session, flush_context):
     ids = session.info.setdefault('_meter_audit_reading_ids', [])
     for obj in session.new:
         if isinstance(obj, MeterReading) and obj.id is not None:
-            # equipment.operational_status هو القيمة التي اختارها المستخدم
-            # أثناء العملية، ونحفظها داخل القراءة نفسها حتى لا تتغير تاريخيًا.
-            equipment = session.get(obj.equipment.__class__, obj.equipment_id) if obj.equipment is not None else None
+            equipment = session.get(Equipment, obj.equipment_id)
             if equipment is not None:
                 obj.equipment_status = str(equipment.operational_status or 'available')
             ids.append(obj.id)
