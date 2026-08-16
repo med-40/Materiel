@@ -24,7 +24,7 @@ def _parse_type_id(value: str | None) -> Optional[int]:
         return None
     try:
         parsed = int(str(value).strip())
-    except ValueError:
+    except (ValueError, TypeError):
         return None
     return parsed if parsed > 0 else None
 
@@ -77,7 +77,7 @@ def _page_context(request, db, current_user, page, page_size, search, type_id, u
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
-def meter_readings_page(request: Request, page: int = Query(1, ge=1), page_size: int = Query(10, ge=5, le=100), search: str = Query(""), type_id: str = Query(""), unit: str = Query(""), sort: str = Query("date_desc"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def meter_readings_page(request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, ge=5, le=100), search: str = Query(""), type_id: str | None = Query(default=None), unit: str = Query(""), sort: str = Query("date_desc"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return templates.TemplateResponse("meter_readings.html", _page_context(request, db, current_user, page, page_size, search, _parse_type_id(type_id), unit, sort))
 
 
