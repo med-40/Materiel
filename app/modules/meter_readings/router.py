@@ -2,8 +2,8 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
@@ -57,22 +57,7 @@ def _parse_date(value):
 
 def _page_context(request, db, current_user, page, page_size, search, type_id, unit, sort):
     rows, total, pages, last_update = services.list_latest_rows(db, page=page, page_size=page_size, search=search, type_id=type_id, unit=unit, sort=sort)
-    return {
-        "request": request,
-        "user": current_user,
-        "readings": rows,
-        "equipment_options": equipment_services.list_equipment(db, limit=10000),
-        "types": type_services.list_types(db),
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "pages": pages,
-        "search": search,
-        "type_id": type_id,
-        "unit": unit,
-        "sort": sort,
-        "last_update": last_update,
-    }
+    return {"request": request, "user": current_user, "readings": rows, "equipment_options": equipment_services.list_equipment(db, limit=10000), "types": type_services.list_types(db), "total": total, "page": page, "page_size": page_size, "pages": pages, "search": search, "type_id": type_id, "unit": unit, "sort": sort, "last_update": last_update}
 
 
 @router.get("", response_class=HTMLResponse)
@@ -96,7 +81,7 @@ def meter_reading_create(equipment_id: int = Form(...), reading_date: str = Form
         services.create_reading(db, equipment_id=equipment_id, odometer=meter_value if unit == "km" else None, hours=meter_value if unit == "hours" else None, reading_date=date_value, notes=notes)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return RedirectResponse(url="/meter-readings", status_code=status.HTTP_303_SEE_OTHER)
+    return JSONResponse({"ok": True, "message": "تم حفظ القراءة بنجاح"})
 
 
 @router.post("/bulk-create")
@@ -110,13 +95,7 @@ def meter_readings_bulk_create(payload: dict = Body(...), db: Session = Depends(
             parse_errors.append(f"الصف {index}: بيانات غير صحيحة.")
             continue
         try:
-            valid_rows.append({
-                "registration": row.get("registration"),
-                "reading_date": _parse_date(row.get("reading_date")),
-                "km_value": _parse_decimal(row.get("km_value")) if row.get("km_value") not in (None, "") else None,
-                "hours_value": _parse_decimal(row.get("hours_value")) if row.get("hours_value") not in (None, "") else None,
-                "notes": row.get("notes", ""),
-            })
+            valid_rows.append({"registration": row.get("registration"), "reading_date": _parse_date(row.get("reading_date")), "km_value": _parse_decimal(row.get("km_value")) if row.get("km_value") not in (None, "") else None, "hours_value": _parse_decimal(row.get("hours_value")) if row.get("hours_value") not in (None, "") else None, "notes": row.get("notes", "")})
         except ValueError as exc:
             parse_errors.append(f"الصف {index}: {exc}")
     created, skipped, service_errors = services.create_bulk_readings(db, valid_rows)
@@ -135,7 +114,6 @@ def meter_readings_import_excel(file: UploadFile = File(...), db: Session = Depe
         headers = next(rows_iter, None)
         if not headers:
             raise ValueError("ملف Excel فارغ.")
-
         def normalize_header(value):
             if value is None:
                 return ""
@@ -143,30 +121,25 @@ def meter_readings_import_excel(file: UploadFile = File(...), db: Session = Depe
             for old, new in {"أ": "ا", "إ": "ا", "آ": "ا", "ة": "ه", "ى": "ي"}.items():
                 text = text.replace(old, new)
             return "".join(ch for ch in text if ch.isalnum())
-
         normalized_headers = [normalize_header(h) for h in headers]
-
         def find_header(*aliases):
             aliases_normalized = {normalize_header(alias) for alias in aliases}
             for idx, header in enumerate(normalized_headers):
                 if header in aliases_normalized:
                     return idx
             return None
-
         registration_idx = find_header("رقم التسجيل", "التسجيل", "registration", "registration number", "immatriculation", "matricule", "reg")
         date_idx = find_header("التاريخ", "تاريخ القراءة", "reading date", "date", "reading_date")
         km_idx = find_header("الكيلومترات", "كيلومترات", "كم", "km", "kilometers", "kilometres", "odometer")
         hours_idx = find_header("الساعات", "ساعات", "ساعة", "hours", "hour meter", "hourmeter")
         notes_idx = find_header("الملاحظات", "ملاحظات", "notes", "note")
         legacy_value_idx = find_header("القراءة", "قيمة العداد", "reading", "value", "meter", "meter reading")
-
         if registration_idx is None:
             raise ValueError("لم يتم العثور على عمود رقم التسجيل.")
         if date_idx is None:
             raise ValueError("لم يتم العثور على عمود التاريخ.")
         if km_idx is None and hours_idx is None and legacy_value_idx is None:
             raise ValueError("لم يتم العثور على عمود الكيلومترات أو الساعات.")
-
         import_rows, parse_errors = [], []
         for row_number, values in enumerate(rows_iter, start=2):
             if not any(value is not None and str(value).strip() for value in values):
@@ -178,14 +151,7 @@ def meter_readings_import_excel(file: UploadFile = File(...), db: Session = Depe
             raw_legacy = values[legacy_value_idx] if legacy_value_idx is not None and legacy_value_idx < len(values) else None
             notes = values[notes_idx] if notes_idx is not None and notes_idx < len(values) else ""
             try:
-                import_rows.append({
-                    "registration": registration,
-                    "reading_date": _parse_date(raw_date),
-                    "km_value": _parse_decimal(raw_km) if raw_km not in (None, "") else None,
-                    "hours_value": _parse_decimal(raw_hours) if raw_hours not in (None, "") else None,
-                    "value": _parse_decimal(raw_legacy) if raw_legacy not in (None, "") else None,
-                    "notes": notes or "",
-                })
+                import_rows.append({"registration": registration, "reading_date": _parse_date(raw_date), "km_value": _parse_decimal(raw_km) if raw_km not in (None, "") else None, "hours_value": _parse_decimal(raw_hours) if raw_hours not in (None, "") else None, "value": _parse_decimal(raw_legacy) if raw_legacy not in (None, "") else None, "notes": notes or ""})
             except ValueError as exc:
                 parse_errors.append(f"صف Excel {row_number}: {exc}")
         created, skipped, service_errors = services.create_bulk_readings(db, import_rows)
