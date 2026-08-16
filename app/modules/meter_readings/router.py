@@ -56,9 +56,7 @@ def _parse_date(value):
 
 
 def _page_context(request, db, current_user, page, page_size, search, type_id, unit, sort):
-    rows, total, pages, last_update = services.list_latest_rows(
-        db, page=page, page_size=page_size, search=search, type_id=type_id, unit=unit, sort=sort
-    )
+    rows, total, pages, last_update = services.list_latest_rows(db, page=page, page_size=page_size, search=search, type_id=type_id, unit=unit, sort=sort)
     return {
         "request": request,
         "user": current_user,
@@ -79,70 +77,34 @@ def _page_context(request, db, current_user, page, page_size, search, type_id, u
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
-def meter_readings_page(
-    request: Request,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=5, le=100),
-    search: str = Query(""),
-    type_id: str = Query(""),
-    unit: str = Query(""),
-    sort: str = Query("date_desc"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    return templates.TemplateResponse(
-        "meter_readings.html",
-        _page_context(request, db, current_user, page, page_size, search, _parse_type_id(type_id), unit, sort),
-    )
+def meter_readings_page(request: Request, page: int = Query(1, ge=1), page_size: int = Query(10, ge=5, le=100), search: str = Query(""), type_id: str = Query(""), unit: str = Query(""), sort: str = Query("date_desc"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return templates.TemplateResponse("meter_readings.html", _page_context(request, db, current_user, page, page_size, search, _parse_type_id(type_id), unit, sort))
 
 
 @router.post("/create")
-def meter_reading_create(
-    equipment_id: int = Form(...),
-    reading_date: str = Form(...),
-    value: str = Form(...),
-    notes: str = Form(""),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+def meter_reading_create(equipment_id: int = Form(...), reading_date: str = Form(...), value: str = Form(...), notes: str = Form(""), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         date_value = _parse_date(reading_date)
         meter_value = _parse_decimal(value)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
     equipment = equipment_services.get_equipment(db, equipment_id)
     if not equipment:
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
-
     unit = equipment.equipment_type.measurement_unit if equipment.equipment_type else "hours"
     try:
-        services.create_reading(
-            db,
-            equipment_id=equipment_id,
-            odometer=meter_value if unit == "km" else None,
-            hours=meter_value if unit == "hours" else None,
-            reading_date=date_value,
-            notes=notes,
-        )
+        services.create_reading(db, equipment_id=equipment_id, odometer=meter_value if unit == "km" else None, hours=meter_value if unit == "hours" else None, reading_date=date_value, notes=notes)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
     return RedirectResponse(url="/meter-readings", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/bulk-create")
-def meter_readings_bulk_create(
-    payload: dict = Body(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+def meter_readings_bulk_create(payload: dict = Body(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     raw_rows = payload.get("rows") if isinstance(payload, dict) else None
     if not isinstance(raw_rows, list):
         raise HTTPException(status_code=400, detail="بيانات اللصق غير صحيحة.")
-
-    valid_rows = []
-    parse_errors = []
+    valid_rows, parse_errors = [], []
     for index, row in enumerate(raw_rows, start=1):
         if not isinstance(row, dict):
             parse_errors.append(f"الصف {index}: بيانات غير صحيحة.")
@@ -151,27 +113,21 @@ def meter_readings_bulk_create(
             valid_rows.append({
                 "registration": row.get("registration"),
                 "reading_date": _parse_date(row.get("reading_date")),
-                "value": _parse_decimal(row.get("value")),
+                "km_value": _parse_decimal(row.get("km_value")) if row.get("km_value") not in (None, "") else None,
+                "hours_value": _parse_decimal(row.get("hours_value")) if row.get("hours_value") not in (None, "") else None,
                 "notes": row.get("notes", ""),
             })
         except ValueError as exc:
             parse_errors.append(f"الصف {index}: {exc}")
-
     created, skipped, service_errors = services.create_bulk_readings(db, valid_rows)
-    errors = parse_errors + service_errors
-    return JSONResponse({"created": created, "skipped": skipped + len(parse_errors), "errors": errors[:100]})
+    return JSONResponse({"created": created, "skipped": skipped + len(parse_errors), "errors": (parse_errors + service_errors)[:100]})
 
 
 @router.post("/import-excel")
-def meter_readings_import_excel(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+def meter_readings_import_excel(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     filename = (file.filename or "").lower()
     if not filename.endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="الرجاء اختيار ملف Excel بصيغة .xlsx")
-
     try:
         workbook = load_workbook(file.file, read_only=True, data_only=True)
         sheet = workbook.active
@@ -199,44 +155,41 @@ def meter_readings_import_excel(
 
         registration_idx = find_header("رقم التسجيل", "التسجيل", "registration", "registration number", "immatriculation", "matricule", "reg")
         date_idx = find_header("التاريخ", "تاريخ القراءة", "reading date", "date", "reading_date")
-        value_idx = find_header("القراءة", "قيمة العداد", "reading", "value", "meter", "meter reading")
-        km_idx = find_header("الكيلومترات", "كيلومترات", "km", "kilometers", "kilometres", "odometer")
-        hours_idx = find_header("الساعات", "ساعات", "hours", "hour meter", "hourmeter")
+        km_idx = find_header("الكيلومترات", "كيلومترات", "كم", "km", "kilometers", "kilometres", "odometer")
+        hours_idx = find_header("الساعات", "ساعات", "ساعة", "hours", "hour meter", "hourmeter")
         notes_idx = find_header("الملاحظات", "ملاحظات", "notes", "note")
+        legacy_value_idx = find_header("القراءة", "قيمة العداد", "reading", "value", "meter", "meter reading")
 
         if registration_idx is None:
             raise ValueError("لم يتم العثور على عمود رقم التسجيل.")
         if date_idx is None:
             raise ValueError("لم يتم العثور على عمود التاريخ.")
-        if value_idx is None and km_idx is None and hours_idx is None:
-            raise ValueError("لم يتم العثور على عمود القراءة أو الكيلومترات أو الساعات.")
+        if km_idx is None and hours_idx is None and legacy_value_idx is None:
+            raise ValueError("لم يتم العثور على عمود الكيلومترات أو الساعات.")
 
-        import_rows = []
-        parse_errors = []
+        import_rows, parse_errors = [], []
         for row_number, values in enumerate(rows_iter, start=2):
             if not any(value is not None and str(value).strip() for value in values):
                 continue
             registration = values[registration_idx] if registration_idx < len(values) else None
             raw_date = values[date_idx] if date_idx < len(values) else None
-            raw_value = values[value_idx] if value_idx is not None and value_idx < len(values) else None
             raw_km = values[km_idx] if km_idx is not None and km_idx < len(values) else None
             raw_hours = values[hours_idx] if hours_idx is not None and hours_idx < len(values) else None
+            raw_legacy = values[legacy_value_idx] if legacy_value_idx is not None and legacy_value_idx < len(values) else None
             notes = values[notes_idx] if notes_idx is not None and notes_idx < len(values) else ""
-            if raw_value is None or str(raw_value).strip() == "":
-                raw_value = raw_km if raw_km is not None and str(raw_km).strip() != "" else raw_hours
             try:
                 import_rows.append({
                     "registration": registration,
                     "reading_date": _parse_date(raw_date),
-                    "value": _parse_decimal(raw_value),
+                    "km_value": _parse_decimal(raw_km) if raw_km not in (None, "") else None,
+                    "hours_value": _parse_decimal(raw_hours) if raw_hours not in (None, "") else None,
+                    "value": _parse_decimal(raw_legacy) if raw_legacy not in (None, "") else None,
                     "notes": notes or "",
                 })
             except ValueError as exc:
                 parse_errors.append(f"صف Excel {row_number}: {exc}")
-
         created, skipped, service_errors = services.create_bulk_readings(db, import_rows)
-        errors = parse_errors + service_errors
-        return JSONResponse({"created": created, "skipped": skipped + len(parse_errors), "errors": errors[:100]})
+        return JSONResponse({"created": created, "skipped": skipped + len(parse_errors), "errors": (parse_errors + service_errors)[:100]})
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"created": 0, "skipped": 0, "errors": [str(exc)]})
     except Exception as exc:
@@ -244,27 +197,8 @@ def meter_readings_import_excel(
 
 
 @router.get("/history/{equipment_id}", response_class=HTMLResponse)
-def meter_history_page(
-    equipment_id: int,
-    request: Request,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=5, le=100),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+def meter_history_page(equipment_id: int, request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, ge=5, le=100), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     equipment, rows, total, pages, page = services.history_rows(db, equipment_id, page=page, page_size=page_size)
     if not equipment:
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
-    return templates.TemplateResponse(
-        "meter_readings_list.html",
-        {
-            "request": request,
-            "user": current_user,
-            "equipment": equipment,
-            "rows": rows,
-            "total_readings": total,
-            "total_pages": pages,
-            "current_page": page,
-            "page_size": page_size,
-        },
-    )
+    return templates.TemplateResponse("meter_readings_list.html", {"request": request, "user": current_user, "equipment": equipment, "rows": rows, "total": total, "pages": pages, "page": page, "page_size": page_size})
