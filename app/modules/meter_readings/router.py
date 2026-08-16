@@ -15,7 +15,6 @@ from app.modules.equipment_types import services as type_services
 from app.modules.meter_readings import services
 from app.modules.users.models import User
 
-
 router = APIRouter(prefix="/meter-readings", tags=["Meter Readings"])
 templates = get_module_templates("app/modules/meter_readings/templates")
 
@@ -143,10 +142,10 @@ def meter_readings_bulk_create(
         raise HTTPException(status_code=400, detail="بيانات اللصق غير صحيحة.")
 
     valid_rows = []
-    errors = []
+    parse_errors = []
     for index, row in enumerate(raw_rows, start=1):
         if not isinstance(row, dict):
-            errors.append(f"الصف {index}: بيانات غير صحيحة.")
+            parse_errors.append(f"الصف {index}: بيانات غير صحيحة.")
             continue
         try:
             valid_rows.append({
@@ -156,11 +155,11 @@ def meter_readings_bulk_create(
                 "notes": row.get("notes", ""),
             })
         except ValueError as exc:
-            errors.append(f"الصف {index}: {exc}")
+            parse_errors.append(f"الصف {index}: {exc}")
 
     created, skipped, service_errors = services.create_bulk_readings(db, valid_rows)
-    errors.extend(service_errors)
-    return JSONResponse({"created": created, "skipped": skipped + len(errors), "errors": errors[:100]})
+    errors = parse_errors + service_errors
+    return JSONResponse({"created": created, "skipped": skipped + len(parse_errors), "errors": errors[:100]})
 
 
 @router.post("/import-excel")
@@ -213,7 +212,7 @@ def meter_readings_import_excel(
             raise ValueError("لم يتم العثور على عمود القراءة أو الكيلومترات أو الساعات.")
 
         import_rows = []
-        errors = []
+        parse_errors = []
         for row_number, values in enumerate(rows_iter, start=2):
             if not any(value is not None and str(value).strip() for value in values):
                 continue
@@ -233,11 +232,11 @@ def meter_readings_import_excel(
                     "notes": notes or "",
                 })
             except ValueError as exc:
-                errors.append(f"صف Excel {row_number}: {exc}")
+                parse_errors.append(f"صف Excel {row_number}: {exc}")
 
         created, skipped, service_errors = services.create_bulk_readings(db, import_rows)
-        errors.extend(service_errors)
-        return JSONResponse({"created": created, "skipped": skipped + len(errors), "errors": errors[:100]})
+        errors = parse_errors + service_errors
+        return JSONResponse({"created": created, "skipped": skipped + len(parse_errors), "errors": errors[:100]})
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"created": 0, "skipped": 0, "errors": [str(exc)]})
     except Exception as exc:
