@@ -15,6 +15,7 @@ from app.modules.equipment.models import Equipment
 from app.modules.meter_readings.models import MeterReading
 from app.modules.meter_readings import services
 from app.modules.meter_readings.router import meter_readings_import_excel
+from app.modules.meter_readings.audit import MeterReadingOperation, MeterReadingOperationEvent
 
 engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
@@ -85,13 +86,14 @@ def test_bulk_import_saves_valid_rows_skips_invalid_rows_and_blank_is_zero(db):
     assert equipment.operational_status == "unavailable"
 
 
-def test_excel_arabic_headers_in_reverse_order_and_blank_value_are_accepted(db):
+def test_excel_arabic_headers_reverse_order_invalid_row_and_operation_log(db):
     equipment = seed_equipment(db, "688")
     wb = Workbook()
     ws = wb.active
     ws.append(["الملاحظات", "الساعات", "رقم التسجيل", "التاريخ", "الكيلومترات"])
     ws.append(["قراءة سليمة", None, "688", "15/08/2026", 333])
     ws.append(["قراءة صفرية", None, "688", "16/08/2026", None])
+    ws.append(["قراءة خاطئة", None, "688", "17/08/2026", 200])
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
@@ -100,15 +102,30 @@ def test_excel_arabic_headers_in_reverse_order_and_blank_value_are_accepted(db):
     db.add(user)
     db.commit()
     db.refresh(user)
-    response = meter_readings_import_excel(upload, "available", db, user)
+
+    response = meter_readings_import_excel(upload, "unavailable", db, user)
     assert response.status_code == 200
     payload = response.body.decode("utf-8")
     assert '"created":2' in payload
+    assert '"skipped":1' in payload
+    assert "أقل من القراءة المسجلة" in payload
     assert "تم اعتبار القراءة صفرًا" in payload
+
     readings = db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).order_by(MeterReading.reading_date).all()
     assert len(readings) == 2
-    assert float(readings[0].odometer) == 333.0
-    assert float(readings[1].odometer) == 0.0
+    assert [float(x.odometer) for x in readings] == [333.0, 0.0]
+    assert equipment.operational_status == "unavailable"
+
+    operation = db.query(MeterReadingOperation).one()
+    assert operation.kind == "excel"
+    assert operation.filename == "قراءات-عربية.xlsx"
+    assert operation.total_rows == 3
+    assert operation.accepted_rows == 2
+    assert operation.rejected_rows == 1
+    assert len(operation.reading_ids) == 2
+    events = db.query(MeterReadingOperationEvent).filter(MeterReadingOperationEvent.operation_id == operation.id).all()
+    assert any(e.event_type == "validation_errors" for e in events)
+    assert any(e.event_type == "warnings" for e in events)
 
 
 def test_operation_rollback_removes_only_its_readings(db):
