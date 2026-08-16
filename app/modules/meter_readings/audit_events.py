@@ -19,6 +19,10 @@ def _collect_meter_readings(session, flush_context):
         if isinstance(obj, MeterReading) and obj.id is not None:
             ids.append(obj.id)
 
+@event.listens_for(Session, 'after_rollback')
+def _clear_meter_audit_on_rollback(session):
+    session.info.pop('_meter_audit_reading_ids', None)
+
 @event.listens_for(Session, 'after_commit')
 def _write_meter_operation(session):
     ids = list(dict.fromkeys(session.info.pop('_meter_audit_reading_ids', [])))
@@ -38,5 +42,4 @@ def _write_meter_operation(session):
             audit_db.add(MeterReadingOperationEvent(operation_id=op.id, event_type='completed', actor_id=actor, details=f'تم حفظ {len(readings)} قراءة بنجاح.'))
             audit_db.commit()
     except Exception:
-        # سجل التدقيق لا يعطل عملية حفظ البيانات الأساسية.
         return
