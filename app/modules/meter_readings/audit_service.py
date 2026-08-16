@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -121,7 +121,7 @@ def rollback_operation(db: Session, op, actor_id):
 
     _refresh_equipment_after_rollback(db, equipment_ids)
     op.status = 'rolled_back'
-    op.rolled_back_at = datetime.utcnow()
+    op.rolled_back_at = datetime.now(timezone.utc)
     op.rolled_back_by_id = actor_id
     add_event(db, op.id, 'rollback', actor_id, f'تم التراجع عن العملية وإلغاء {count} قراءة مرتبطة بها فقط.')
     db.commit()
