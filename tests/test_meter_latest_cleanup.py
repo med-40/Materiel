@@ -3,24 +3,13 @@ from datetime import datetime
 from app.modules.meter_readings import services
 from app.modules.meter_readings.legacy_cleanup import cleanup_legacy_readings
 from app.modules.meter_readings.models import MeterReading
-
-from test_meter_readings import seed_equipment
+from test_meter_readings import db, seed_equipment
 
 
 def test_legacy_lower_latest_reading_is_removed_and_main_uses_valid_latest(db):
     equipment = seed_equipment(db, "356", "km")
-    old_valid = MeterReading(
-        equipment_id=equipment.id,
-        reading_date=datetime(2023, 8, 16),
-        odometer=3333333,
-        source="manual",
-    )
-    legacy_invalid = MeterReading(
-        equipment_id=equipment.id,
-        reading_date=datetime(2026, 8, 11),
-        odometer=500,
-        source="manual",
-    )
+    old_valid = MeterReading(equipment_id=equipment.id, reading_date=datetime(2023, 8, 16), odometer=3333333, source="manual")
+    legacy_invalid = MeterReading(equipment_id=equipment.id, reading_date=datetime(2026, 8, 11), odometer=500, source="manual")
     db.add_all([old_valid, legacy_invalid])
     db.commit()
 
