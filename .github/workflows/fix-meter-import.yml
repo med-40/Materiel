@@ -56,4 +56,6 @@ jobs:
           git add app/modules/meter_readings/router.py tests/test_meter_readings.py
           git diff --cached --quiet && exit 0
           git commit -m "fix: detect Arabic meter column headers in Excel import"
-          git push
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
