@@ -1,0 +1,39 @@
+name: Add equipment meter history button
+on:
+  push:
+    branches: [fix/equipment-history-navigation]
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add button
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/modules/equipment/templates/equipment_detail.html')
+          t=p.read_text(encoding='utf-8')
+          marker='<a href="/equipment" class="btn-outline">العودة إلى العتاد</a>'
+          button='<a href="/equipment/{{ item.id }}/meters" class="btn-outline">سجل قراءات العداد</a>'
+          if '/meters"' not in t:
+              if marker not in t: raise SystemExit('equipment detail navigation marker not found')
+              t=t.replace(marker,marker+'\n    '+button,1)
+              p.write_text(t,encoding='utf-8')
+          PY
+      - name: Verify
+        run: |
+          python -m compileall -q app web
+          grep -q '/equipment/{{ item.id }}/meters' app/modules/equipment/templates/equipment_detail.html
+          grep -q 'def equipment_meters_page' app/modules/equipment/router.py
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/add-equipment-history-button.yml
+          git add app/modules/equipment/templates/equipment_detail.html
+          git commit -m "feat: add equipment meter history button"
+          git push origin HEAD:fix/equipment-history-navigation
