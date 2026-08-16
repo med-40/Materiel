@@ -138,6 +138,27 @@ def _refresh_equipment_current(db: Session, equipment: Equipment, unit: str):
         equipment.current_hours = _value(latest, unit)
 
 
+
+def cleanup_invalid_readings(db: Session):
+    """Remove legacy readings that violate the hard date/value rules."""
+    today = datetime.utcnow().date()
+    cutoff = datetime.combine(today, datetime.max.time())
+    invalid = db.query(MeterReading).filter(MeterReading.reading_date > cutoff).all()
+    invalid += db.query(MeterReading).filter((MeterReading.odometer < 0) | (MeterReading.hours < 0)).all()
+    unique = {item.id: item for item in invalid}
+    if not unique:
+        return 0
+    equipment_ids = {item.equipment_id for item in unique.values()}
+    for item in unique.values():
+        db.delete(item)
+    db.flush()
+    for equipment_id in equipment_ids:
+        equipment = get_equipment_with_readings(db, equipment_id)
+        if equipment:
+            _refresh_equipment_current(db, equipment, _unit(equipment))
+    db.commit()
+    return len(unique)
+
 def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: str = "", type_id: Optional[int] = None, unit: str = "", sort: str = "date_desc"):
     page = max(1, page)
     page_size = min(max(1, page_size), 100)
@@ -266,6 +287,15 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         equipment = equipment_map.get(registration)
         if not equipment:
             errors.append(f"الصف {row_number}: رقم التسجيل {registration_raw} غير موجود في النظام.")
+            continue
+        equipment_type_raw = row.get("equipment_type")
+        if equipment_type_raw is None or not str(equipment_type_raw).strip():
+            errors.append(f"الصف {row_number}: نوع العتاد فارغ.")
+            continue
+        expected_type = str(equipment.equipment_type.name if equipment.equipment_type else "").strip()
+        pasted_type = " ".join(str(equipment_type_raw).strip().split()).casefold()
+        if expected_type and pasted_type != " ".join(expected_type.split()).casefold():
+            errors.append(f"الصف {row_number}: نوع العتاد «{equipment_type_raw}» لا يطابق النوع المسجل «{expected_type}» لرقم التسجيل {registration_raw}.")
             continue
         reading_date = row.get("reading_date")
         if not isinstance(reading_date, datetime):

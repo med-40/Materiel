@@ -117,6 +117,7 @@ def _finish_operation(db: Session, current_user: User, kind: str, filename: str 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def meter_readings_page(request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, ge=5, le=100), search: str = Query(""), type_id: str | None = Query(default=None), unit: str = Query(""), sort: str = Query("date_desc"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    services.cleanup_invalid_readings(db)
     return templates.TemplateResponse(
         "meter_readings.html",
         _page_context(request, db, current_user, page, page_size, search, _parse_type_id(type_id), unit, sort),
@@ -162,6 +163,7 @@ def _prepare_paste_rows(raw_rows):
             continue
         try:
             valid_rows.append({
+                "equipment_type": row.get("equipment_type"),
                 "registration": row.get("registration"),
                 "reading_date": _parse_date(row.get("reading_date")),
                 "km_value": _parse_decimal(row.get("km_value")) if row.get("km_value") not in (None, "") else None,
