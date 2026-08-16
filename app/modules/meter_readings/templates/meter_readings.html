@@ -4,221 +4,40 @@
 
 {% block content %}
 <div class="meter-page" dir="rtl">
-
-    <div class="meter-head">
-        <div>
-            <h1>قراءات العداد لجميع العتاد</h1>
-            <p>متابعة آخر قراءة مسجلة لكل عتاد مع الفارق عن القراءة السابقة</p>
-        </div>
-        <div class="last-update-box">
-            <span>آخر تحديث</span>
-            <strong>{{ last_update }}</strong>
-        </div>
-    </div>
-
-    <div class="meter-actions">
-        <button type="button" class="btn-add" onclick="openReadingModal()">＋ إضافة قراءة</button>
-        <button type="button" class="btn-light" onclick="openPasteModal()">▤ لصق من Excel</button>
-        <button type="button" class="btn-light" onclick="openImportModal()">⇧ استيراد ملف Excel</button>
-        <button type="button" class="btn-light" onclick="openSelectedHistory()">▣ عرض السجل الزمني</button>
-        <button type="button" class="btn-light btn-icon" onclick="window.location.reload()" title="تحديث">↻</button>
-    </div>
-
-    <form class="meter-toolbar" method="get" action="/meter-readings">
-        <div class="search-wrap">
-            <span>⌕</span>
-            <input type="search" name="search" value="{{ search }}" placeholder="بحث...">
-        </div>
-
-        <select name="type_id" aria-label="نوع العتاد">
-            <option value="">نوع العتاد — الكل</option>
-            {% for type in types %}
-            <option value="{{ type.id }}" {% if type_id == type.id %}selected{% endif %}>{{ type.name }}</option>
-            {% endfor %}
-        </select>
-
-        <select name="unit" aria-label="وحدة العداد">
-            <option value="">وحدة العداد — الكل</option>
-            <option value="km" {% if unit == "km" %}selected{% endif %}>كم</option>
-            <option value="hours" {% if unit == "hours" %}selected{% endif %}>ساعة عمل</option>
-        </select>
-
-        <select name="sort" aria-label="الترتيب">
-            <option value="date_desc" {% if sort == "date_desc" %}selected{% endif %}>آخر قراءة — الأحدث</option>
-            <option value="date_asc" {% if sort == "date_asc" %}selected{% endif %}>آخر قراءة — الأقدم</option>
-            <option value="registration" {% if sort == "registration" %}selected{% endif %}>رقم التسجيل</option>
-        </select>
-
-        <input type="hidden" name="page_size" value="{{ page_size }}">
-        <button type="submit" class="btn-filter">تطبيق</button>
-    </form>
-
-    <div class="table-card">
-        <div class="table-titlebar">
-            <div>
-                <strong>بيانات العداد الأساسية</strong>
-                <span>• آخر قراءة لكل عتاد</span>
-            </div>
-            <div class="table-date">آخر قراءة: <strong>{{ last_update }}</strong></div>
-        </div>
-
-        <div class="meter-table-shell" id="meterTableShell">
-            <table class="meter-table">
-                <thead>
-                    <tr class="group-row">
-                        <th colspan="4" class="sticky-group">بيانات العتاد الأساسية</th>
-                        <th colspan="7">بيانات آخر قراءة</th>
-                    </tr>
-                    <tr>
-                        <th>#</th>
-                        <th class="sticky-model">الطراز</th>
-                        <th class="sticky-registration">رقم التسجيل</th>
-                        <th>موقع العمل</th>
-                        <th>وحدة العداد</th>
-                        <th>آخر تاريخ قراءة</th>
-                        <th>القراءة</th>
-                        <th>الفارق عن السابق</th>
-                        <th>الملاحظة</th>
-                        <th>حالة القراءة</th>
-                        <th>السجل</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for row in readings %}
-                    <tr class="meter-row" data-equipment-id="{{ row.equipment_id }}" onclick="selectRow(this)">
-                        <td>{{ row.number }}</td>
-                        <td class="sticky-model strong">{{ row.model }}</td>
-                        <td class="sticky-registration registration">{{ row.registration }}</td>
-                        <td>{{ row.location }}</td>
-                        <td>{{ row.unit }}</td>
-                        <td>{{ row.date }}</td>
-                        <td class="reading">{{ row.reading }}</td>
-                        <td>
-                            {% if row.difference == "—" %}
-                                <span class="reference">—</span>
-                            {% elif row.difference.startswith("-") %}
-                                <span class="negative">{{ row.difference }}</span>
-                            {% else %}
-                                <span class="positive">{{ row.difference }}</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ row.note }}</td>
-                        <td><span class="status status-{{ row.status_class }}">{{ row.status }}</span></td>
-                        <td><a class="history-link" href="/meter-readings/history/{{ row.equipment_id }}" onclick="event.stopPropagation()">سجل</a></td>
-                    </tr>
-                {% else %}
-                    <tr>
-                        <td colspan="11" class="empty-row">لا توجد بيانات لعرضها.</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="scroll-controls" aria-label="أزرار التمرير">
-            <button type="button" onclick="scrollTable('right')" title="تمرير إلى اليمين">→</button>
-            <button type="button" onclick="scrollTable('left')" title="تمرير إلى اليسار">←</button>
-            <span></span>
-            <button type="button" onclick="scrollTable('top')" title="إلى الأعلى">↑</button>
-            <button type="button" onclick="scrollTable('bottom')" title="إلى الأسفل">↓</button>
-        </div>
-
-        <div class="table-footer">
-            <div class="footer-count">عدد العتاد: <strong>{{ total }}</strong></div>
-            <div class="pagination">
-                <a class="page-arrow {% if page <= 1 %}disabled{% endif %}" href="?page={{ [1, page - 1]|max }}&page_size={{ page_size }}&search={{ search|urlencode }}&type_id={{ type_id or '' }}&unit={{ unit }}&sort={{ sort }}">‹</a>
-                {% set start_page = [1, page - 2]|max %}
-                {% set end_page = [pages, page + 2]|min %}
-                {% for p in range(start_page, end_page + 1) %}
-                    <a class="page-number {% if p == page %}active{% endif %}" href="?page={{ p }}&page_size={{ page_size }}&search={{ search|urlencode }}&type_id={{ type_id or '' }}&unit={{ unit }}&sort={{ sort }}">{{ p }}</a>
-                {% endfor %}
-                <a class="page-arrow {% if page >= pages %}disabled{% endif %}" href="?page={{ [pages, page + 1]|min }}&page_size={{ page_size }}&search={{ search|urlencode }}&type_id={{ type_id or '' }}&unit={{ unit }}&sort={{ sort }}">›</a>
-            </div>
-            <form class="page-size-form" method="get">
-                <span>عدد الصفوف في الصفحة</span>
-                <select name="page_size" onchange="this.form.submit()">
-                    {% for size in [10, 20, 50, 100] %}
-                    <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }}</option>
-                    {% endfor %}
-                </select>
-                <input type="hidden" name="search" value="{{ search }}">
-                <input type="hidden" name="type_id" value="{{ type_id or '' }}">
-                <input type="hidden" name="unit" value="{{ unit }}">
-                <input type="hidden" name="sort" value="{{ sort }}">
-            </form>
-        </div>
-        <div class="legend">
-            <span class="status status-success">● طبيعي</span>
-            <span class="status status-warning">▲ يحتاج مراجعة</span>
-            <span class="status status-danger">↓ قراءة غير طبيعية</span>
-            <span class="status status-reference">● أولى قراءة</span>
-        </div>
-    </div>
+    <div class="meter-head"><div><h1>قراءات العداد لجميع العتاد</h1><p>متابعة آخر قراءة مسجلة لكل عتاد مع الفارق عن القراءة السابقة</p></div><div class="last-update-box"><span>آخر تحديث</span><strong>{{ last_update }}</strong></div></div>
+    <div class="meter-actions"><button type="button" class="btn-add" onclick="openReadingModal()">＋ إضافة قراءة</button><button type="button" class="btn-light" onclick="openPasteModal()">▤ لصق من Excel</button><button type="button" class="btn-light" onclick="openImportModal()">⇧ استيراد ملف Excel</button><button type="button" class="btn-light" onclick="openSelectedHistory()">▣ عرض السجل الزمني</button><button type="button" class="btn-light btn-icon" onclick="window.location.reload()">↻</button></div>
+    <form class="meter-toolbar" method="get" action="/meter-readings"><div class="search-wrap"><span>⌕</span><input type="search" name="search" value="{{ search }}" placeholder="بحث برقم التسجيل أو الطراز..."></div><select name="type_id"><option value="">نوع العتاد — الكل</option>{% for type in types %}<option value="{{ type.id }}" {% if type_id == type.id %}selected{% endif %}>{{ type.name }}</option>{% endfor %}</select><select name="unit"><option value="">وحدة العداد — الكل</option><option value="km" {% if unit == "km" %}selected{% endif %}>كم</option><option value="hours" {% if unit == "hours" %}selected{% endif %}>ساعة عمل</option></select><select name="sort"><option value="date_desc" {% if sort == "date_desc" %}selected{% endif %}>آخر قراءة — الأحدث</option><option value="date_asc" {% if sort == "date_asc" %}selected{% endif %}>آخر قراءة — الأقدم</option><option value="registration" {% if sort == "registration" %}selected{% endif %}>رقم التسجيل</option></select><input type="hidden" name="page_size" value="{{ page_size }}"><button type="submit" class="btn-filter">تطبيق</button></form>
+    <div class="table-card"><div class="table-titlebar"><div><strong>بيانات العداد الأساسية</strong><span> • آخر قراءة لكل عتاد</span></div><div class="table-date">آخر قراءة: <strong>{{ last_update }}</strong></div></div>
+    <div class="meter-table-shell" id="meterTableShell"><table class="meter-table"><thead><tr class="group-row"><th colspan="3" class="sticky-group">بيانات العتاد الأساسية</th><th colspan="8">بيانات آخر قراءة</th></tr><tr><th>#</th><th class="sticky-model">الطراز</th><th class="sticky-registration">رقم التسجيل</th><th>موقع العمل</th><th>وحدة العداد</th><th>آخر تاريخ قراءة</th><th>القراءة</th><th>الفارق عن السابق</th><th>الملاحظة</th><th>حالة القراءة</th><th>السجل</th></tr></thead><tbody>{% for row in readings %}<tr class="meter-row" data-equipment-id="{{ row.equipment_id }}" onclick="selectRow(this)"><td>{{ row.number }}</td><td class="sticky-model strong">{{ row.model }}</td><td class="sticky-registration registration">{{ row.registration }}</td><td>{{ row.location }}</td><td>{{ row.unit }}</td><td>{{ row.date }}</td><td class="reading">{{ row.reading }}</td><td>{% if row.difference == '—' %}<span class="reference">—</span>{% elif row.difference == 'غير صالح' %}<span class="negative">غير صالح</span>{% else %}<span class="positive">{{ row.difference }}</span>{% endif %}</td><td>{{ row.note }}</td><td><span class="status status-{{ row.status_class }}">{{ row.status }}</span></td><td><a class="history-link" href="/meter-readings/history/{{ row.equipment_id }}" onclick="event.stopPropagation()">سجل</a></td></tr>{% else %}<tr><td colspan="11" class="empty-row">لا توجد بيانات لعرضها.</td></tr>{% endfor %}</tbody></table></div>
+    <div class="scroll-controls"><button type="button" onclick="scrollTable('right')">→</button><button type="button" onclick="scrollTable('left')">←</button><span></span><button type="button" onclick="scrollTable('top')">↑</button><button type="button" onclick="scrollTable('bottom')">↓</button></div>
+    <div class="table-footer"><div class="footer-count">عدد العتاد: <strong>{{ total }}</strong></div><div class="pagination"><a class="page-arrow {% if page<=1 %}disabled{% endif %}" href="?page={{ [1,page-1]|max }}&page_size={{ page_size }}&search={{ search|urlencode }}&type_id={{ type_id or '' }}&unit={{ unit }}&sort={{ sort }}">‹</a>{% set start_page=[1,page-2]|max %}{% set end_page=[pages,page+2]|min %}{% for p in range(start_page,end_page+1) %}<a class="page-number {% if p==page %}active{% endif %}" href="?page={{ p }}&page_size={{ page_size }}&search={{ search|urlencode }}&type_id={{ type_id or '' }}&unit={{ unit }}&sort={{ sort }}">{{ p }}</a>{% endfor %}<a class="page-arrow {% if page>=pages %}disabled{% endif %}" href="?page={{ [pages,page+1]|min }}&page_size={{ page_size }}&search={{ search|urlencode }}&type_id={{ type_id or '' }}&unit={{ unit }}&sort={{ sort }}">›</a></div><form class="page-size-form" method="get"><span>عدد الصفوف</span><select name="page_size" onchange="this.form.submit()">{% for size in [10,20,50,100] %}<option value="{{ size }}" {% if page_size==size %}selected{% endif %}>{{ size }}</option>{% endfor %}</select><input type="hidden" name="search" value="{{ search }}"><input type="hidden" name="type_id" value="{{ type_id or '' }}"><input type="hidden" name="unit" value="{{ unit }}"><input type="hidden" name="sort" value="{{ sort }}"></form></div></div>
 </div>
 
-<div class="modal-backdrop" id="readingModal" onclick="closeReadingModal(event)">
-    <div class="reading-modal" onclick="event.stopPropagation()">
-        <div class="modal-head">
-            <div><h2>إضافة قراءة عداد</h2><p>أدخل رقم التسجيل أو اختر العتاد، ثم التاريخ وقيمة العداد.</p></div>
-            <button type="button" class="modal-close" onclick="closeReadingModal()">×</button>
-        </div>
-        <form method="post" action="/meter-readings/create" class="reading-form">
-            <div class="form-field full">
-                <label>العتاد</label>
-                <select name="equipment_id" id="modalEquipment" required onchange="updateUnitHint()">
-                    <option value="">اختر العتاد</option>
-                    {% for equipment in equipment_options %}
-                    <option value="{{ equipment.id }}" data-unit="{{ equipment.equipment_type.measurement_unit if equipment.equipment_type else 'hours' }}">
-                        {{ equipment.equipment_model.name if equipment.equipment_model else '—' }} — {{ equipment.registration_number or equipment.asset_code }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-field"><label>تاريخ القراءة</label><input type="date" name="reading_date" required></div>
-            <div class="form-field"><label>قيمة العداد <small id="unitHint">(اختر العتاد)</small></label><input type="number" name="value" min="0" step="0.1" required></div>
-            <div class="form-field full"><label>الملاحظة <span>اختياري</span></label><input type="text" name="notes" maxlength="300" placeholder="مثال: عمل عادي، صيانة، مهمة نقل..."></div>
-            <div class="modal-actions full"><button type="submit" class="btn-add">حفظ القراءة</button><button type="button" class="btn-light" onclick="closeReadingModal()">إلغاء</button></div>
-        </form>
-    </div>
-</div>
+<div class="modal-backdrop" id="readingModal" onclick="closeReadingModal(event)"><div class="reading-modal" onclick="event.stopPropagation()"><div class="modal-head"><div><h2>إضافة قراءة عداد</h2><p>اختر العتاد ثم التاريخ وقيمة العداد.</p></div><button type="button" class="modal-close" onclick="closeReadingModal()">×</button></div><form method="post" action="/meter-readings/create" class="reading-form"><div class="form-field full"><label>العتاد</label><select name="equipment_id" id="modalEquipment" required onchange="updateUnitHint()"><option value="">اختر العتاد</option>{% for equipment in equipment_options %}<option value="{{ equipment.id }}" data-unit="{{ equipment.equipment_type.measurement_unit if equipment.equipment_type else 'hours' }}">{{ equipment.equipment_model.name if equipment.equipment_model else '—' }} — {{ equipment.registration_number or equipment.asset_code }}</option>{% endfor %}</select></div><div class="form-field"><label>تاريخ القراءة</label><input type="date" name="reading_date" required></div><div class="form-field"><label>قيمة العداد <small id="unitHint">(اختر العتاد)</small></label><input type="number" name="value" min="0" step="0.1" required></div><div class="form-field full"><label>الملاحظة</label><input type="text" name="notes" maxlength="300"></div><div class="modal-actions full"><button type="submit" class="btn-add">حفظ القراءة</button><button type="button" class="btn-light" onclick="closeReadingModal()">إلغاء</button></div></form></div></div>
 
-<div class="modal-backdrop" id="pasteModal" onclick="closeModalById('pasteModal', event)">
-    <div class="reading-modal wide-modal" onclick="event.stopPropagation()">
-        <div class="modal-head"><div><h2>لصق قراءات من Excel</h2><p>انسخ الخلايا من Excel والصقها هنا. الأعمدة: رقم التسجيل، التاريخ، القراءة، الملاحظات.</p></div><button type="button" class="modal-close" onclick="closeModalById('pasteModal')">×</button></div>
-        <div class="paste-help">يمكن نسخ عدة صفوف من Excel مباشرة دون إعادة تنسيقها.</div>
-        <textarea id="pasteData" class="paste-area" placeholder="رقم التسجيل    التاريخ    القراءة    الملاحظات"></textarea>
-        <div id="pasteResult" class="import-result"></div>
-        <div class="modal-actions"><button type="button" class="btn-add" onclick="submitPastedReadings()">حفظ القراءات</button><button type="button" class="btn-light" onclick="closeModalById('pasteModal')">إلغاء</button></div>
-    </div>
-</div>
+<div class="modal-backdrop" id="pasteModal" onclick="closeModalById('pasteModal',event)"><div class="reading-modal wide-modal" onclick="event.stopPropagation()"><div class="modal-head"><div><h2>لصق قراءات من Excel</h2><p>انسخ الأعمدة التالية من Excel والصقها كما هي.</p></div><button type="button" class="modal-close" onclick="closeModalById('pasteModal')">×</button></div><div class="excel-schema"><strong>رقم التسجيل | التاريخ | الكيلومترات | الساعات | الملاحظات</strong><br><span>املأ الكيلومترات أو الساعات فقط حسب نوع العتاد. النظام يحدد العمود الصحيح من نوع العداد.</span></div><textarea id="pasteData" class="paste-area" placeholder="123-001&#9;15/08/2026&#9;12500&#9;&#9;عادي
+123-002&#9;15/08/2026&#9;&#9;8750&#9;صيانة"></textarea><div id="pasteResult" class="import-result"></div><div class="modal-actions"><button type="button" class="btn-add" onclick="submitPastedReadings()">مطابقة وحفظ</button><button type="button" class="btn-light" onclick="closeModalById('pasteModal')">إلغاء</button></div></div></div>
 
-<div class="modal-backdrop" id="importModal" onclick="closeModalById('importModal', event)">
-    <div class="reading-modal" onclick="event.stopPropagation()">
-        <div class="modal-head"><div><h2>استيراد ملف Excel</h2><p>تتم مطابقة رقم التسجيل مع العتاد الموجود فقط.</p></div><button type="button" class="modal-close" onclick="closeModalById('importModal')">×</button></div>
-        <div class="import-box"><input type="file" id="excelFile" accept=".xlsx"><small>الأعمدة المقبولة: رقم التسجيل / Registration / Immatriculation، التاريخ / Date، القراءة / Reading / Value، ويمكن أيضًا استخدام كيلومترات أو ساعات.</small></div>
-        <div id="excelResult" class="import-result"></div>
-        <div class="modal-actions"><button type="button" class="btn-add" onclick="submitExcelImport()">استيراد وحفظ</button><button type="button" class="btn-light" onclick="closeModalById('importModal')">إلغاء</button></div>
-    </div>
-</div>
+<div class="modal-backdrop" id="importModal" onclick="closeModalById('importModal',event)"><div class="reading-modal" onclick="event.stopPropagation()"><div class="modal-head"><div><h2>استيراد ملف Excel</h2><p>رقم التسجيل + التاريخ + الكيلومترات + الساعات + الملاحظات.</p></div><button type="button" class="modal-close" onclick="closeModalById('importModal')">×</button></div><div class="excel-schema"><strong>رقم التسجيل | التاريخ | الكيلومترات | الساعات | الملاحظات</strong><br><span>سيتم مطابقة رقم التسجيل ثم أخذ القيمة من العمود الموافق لنوع عداد العتاد.</span></div><div class="import-box"><input type="file" id="excelFile" accept=".xlsx"></div><div id="excelResult" class="import-result"></div><div class="modal-actions"><button type="button" class="btn-add" onclick="submitExcelImport()">مطابقة وحفظ</button><button type="button" class="btn-light" onclick="closeModalById('importModal')">إلغاء</button></div></div></div>
 
 <style>
-.meter-page{width:100%;max-width:100%;padding-bottom:18px}.meter-head{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:10px}.meter-head h1{margin:0;color:#173b63;font-size:25px;font-weight:700}.meter-head p{margin:6px 0 0;color:#64748b;font-size:13px}.last-update-box{min-width:115px;background:#eef8f1;border:1px solid #d4eadb;border-radius:8px;padding:8px 14px;text-align:center}.last-update-box span{display:block;color:#64748b;font-size:11px}.last-update-box strong{display:block;color:#087443;font-size:13px;margin-top:2px}.meter-actions{display:flex;gap:7px;align-items:center;margin-bottom:10px;flex-wrap:wrap}.btn-add,.btn-light,.btn-filter{border-radius:7px;padding:8px 13px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #d4dbe3}.btn-add{background:#1769d1;color:#fff;border-color:#1769d1}.btn-add:hover{background:#1258b2}.btn-light{background:#fff;color:#334155}.btn-light:hover{background:#f1f5f9}.btn-icon{width:38px;padding:8px}.meter-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#fff;border:1px solid #e0e5ea;border-radius:8px;padding:8px;margin-bottom:10px}.search-wrap{display:flex;align-items:center;gap:5px;border:1px solid #d4dbe3;border-radius:7px;background:#fff;min-width:190px;padding:0 9px;height:36px;color:#64748b}.search-wrap input{border:0;outline:0;width:100%;font-size:12px;background:transparent}.meter-toolbar select{height:36px;min-width:130px;border:1px solid #d4dbe3;border-radius:7px;background:#fff;color:#475569;padding:0 8px;font-size:12px}.btn-filter{height:36px;background:#f1f5f9;color:#173b63}.table-card{background:#fff;border:1px solid #d8e0e8;border-radius:8px;box-shadow:0 1px 3px rgba(15,23,42,.06);overflow:hidden}.table-titlebar{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f8fafc;border-bottom:1px solid #dbe3ec;color:#173b63;font-size:12px}.table-titlebar span{color:#64748b;margin-right:4px}.table-date{color:#64748b}.table-date strong{color:#173b63}.meter-table-shell{width:100%;height:calc(100vh - 390px);min-height:360px;overflow:auto;position:relative;background:#fff;scroll-behavior:smooth}.meter-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:1180px;direction:rtl;font-size:12px}.meter-table th,.meter-table td{padding:8px 10px;border-left:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;white-space:nowrap;text-align:center;height:39px}.meter-table thead th{position:sticky;top:0;z-index:20;background:#173b63;color:#fff;font-weight:600}.meter-table thead .group-row th{height:34px;background:#17466f;font-size:12px}.meter-table thead .group-row th.sticky-group{z-index:25}.meter-row{cursor:pointer}.meter-row:hover td{background:#f5f9fd}.meter-row.selected td{background:#eaf3ff!important;box-shadow:inset 0 0 0 1px #a8c8ef}.sticky-model,.sticky-registration{position:sticky;z-index:30;background:#fff}.meter-table thead .sticky-model,.meter-table thead .sticky-registration{background:#173b63;z-index:35}.sticky-registration{right:0;min-width:125px;width:125px}.sticky-model{right:125px;min-width:145px;width:145px}.registration{font-weight:700;color:#173b63}.strong{font-weight:700;color:#173b63}.meter-table td:nth-child(1),.meter-table th:nth-child(1){min-width:48px;width:48px}.meter-table td:nth-child(4),.meter-table th:nth-child(4){min-width:110px}.reading{font-weight:700;color:#173b63}.positive{color:#087443;font-weight:700}.negative{color:#b42318;font-weight:700}.reference{color:#2563eb;font-weight:700}.status{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}.status-success{color:#166534;background:#dcfce7}.status-warning{color:#92400e;background:#fef3c7}.status-danger{color:#991b1b;background:#fee2e2}.status-reference{color:#1d4ed8;background:#dbeafe}.status-empty{color:#6b7280;background:#f3f4f6}.history-link{color:#1769d1;font-weight:700;text-decoration:none}.history-link:hover{text-decoration:underline}.empty-row{padding:30px!important;color:#64748b}.scroll-controls{display:flex;align-items:center;gap:6px;padding:7px 10px;background:#f8fafc;border-top:1px solid #e2e8f0}.scroll-controls button{width:32px;height:30px;border:1px solid #d4dbe3;border-radius:6px;background:#fff;cursor:pointer;color:#173b63}.scroll-controls span{flex:1}.table-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 12px;border-top:1px solid #dbe3ec}.footer-count{color:#64748b;font-size:12px}.footer-count strong{color:#173b63}.pagination{display:flex;gap:4px;align-items:center}.page-number,.page-arrow{min-width:32px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d4dbe3;border-radius:6px;text-decoration:none;color:#173b63;background:#fff;font-size:12px}.page-number.active{background:#1769d1;color:#fff;border-color:#1769d1}.page-arrow.disabled{opacity:.45;pointer-events:none}.page-size-form{display:flex;align-items:center;gap:6px;color:#64748b;font-size:11px}.page-size-form select{height:30px;border:1px solid #d4dbe3;border-radius:6px;background:#fff}.legend{display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px;background:#f8fafc;border-top:1px solid #dbe3ec}.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center;padding:16px}.modal-backdrop.open{display:flex}.reading-modal{width:min(650px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:10px;box-shadow:0 20px 50px rgba(15,23,42,.25);padding:18px}.wide-modal{width:min(850px,96vw)}.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}.modal-head h2{margin:0;color:#173b63;font-size:19px}.modal-head p{margin:5px 0 0;color:#64748b;font-size:12px}.modal-close{border:0;background:transparent;font-size:26px;color:#64748b;cursor:pointer}.reading-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.form-field{display:flex;flex-direction:column;gap:5px}.form-field.full{grid-column:1/-1}.form-field label{font-size:12px;font-weight:700;color:#334155}.form-field label span{font-weight:400;color:#94a3b8}.form-field input,.form-field select{height:38px;border:1px solid #d4dbe3;border-radius:7px;padding:0 10px;background:#fff;font-size:12px;outline:none}.modal-actions{display:flex;gap:7px;justify-content:flex-start;margin-top:10px}.paste-help{background:#f8fafc;border:1px solid #e2e8f0;padding:9px;border-radius:7px;color:#64748b;font-size:12px;margin-bottom:8px}.paste-area{width:100%;min-height:220px;resize:vertical;border:1px solid #cbd5e1;border-radius:8px;padding:10px;box-sizing:border-box;font:12px monospace;direction:ltr;text-align:left}.import-box{border:1px dashed #94a3b8;border-radius:8px;padding:20px;text-align:center;background:#f8fafc}.import-box input{max-width:100%}.import-box small{display:block;margin-top:10px;color:#64748b;line-height:1.7}.import-result{margin-top:10px;font-size:12px;line-height:1.8}.import-result.success,.import-result.error,.import-result.warning{padding:8px;border-radius:7px}.import-result.success{background:#ecfdf3;color:#166534}.import-result.error{background:#fef2f2;color:#991b1b}.import-result.warning{background:#fffbeb;color:#92400e}@media(max-width:700px){.meter-head{align-items:flex-start}.meter-head h1{font-size:19px}.last-update-box{min-width:90px}.meter-table-shell{height:calc(100vh - 430px)}.reading-form{grid-template-columns:1fr}.form-field.full{grid-column:auto}.meter-actions .btn-light,.meter-actions .btn-add{font-size:11px;padding:7px 9px}}
+.meter-page{width:100%;padding-bottom:18px}.meter-head{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:10px}.meter-head h1{margin:0;color:#173b63;font-size:25px}.meter-head p{margin:6px 0;color:#64748b;font-size:13px}.last-update-box{min-width:115px;background:#eef8f1;border:1px solid #d4eadb;border-radius:8px;padding:8px 14px;text-align:center}.last-update-box span{display:block;color:#64748b;font-size:11px}.last-update-box strong{display:block;color:#087443;font-size:13px}.meter-actions{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}.btn-add,.btn-light,.btn-filter{border-radius:7px;padding:8px 13px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #d4dbe3}.btn-add{background:#1769d1;color:#fff;border-color:#1769d1}.btn-light{background:#fff;color:#334155}.btn-icon{width:38px}.meter-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#fff;border:1px solid #e0e5ea;border-radius:8px;padding:8px;margin-bottom:10px}.search-wrap{display:flex;align-items:center;gap:5px;border:1px solid #d4dbe3;border-radius:7px;background:#fff;min-width:190px;padding:0 9px;height:36px;color:#64748b}.search-wrap input{border:0;outline:0;width:100%;font-size:12px}.meter-toolbar select{height:36px;min-width:130px;border:1px solid #d4dbe3;border-radius:7px;background:#fff;color:#475569;padding:0 8px;font-size:12px}.table-card{background:#fff;border:1px solid #d8e0e8;border-radius:8px;overflow:hidden}.table-titlebar{display:flex;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-bottom:1px solid #dbe3ec;color:#173b63;font-size:12px}.table-titlebar span{color:#64748b}.meter-table-shell{width:100%;height:calc(100vh - 390px);min-height:360px;overflow:auto;position:relative}.meter-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:1180px;direction:rtl;font-size:12px}.meter-table th,.meter-table td{padding:8px 10px;border-left:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;white-space:nowrap;text-align:center;height:39px}.meter-table thead th{position:sticky;top:0;z-index:20;background:#173b63;color:#fff}.meter-table .group-row th{background:#17466f}.meter-row:hover td{background:#f5f9fd}.meter-row.selected td{background:#eaf3ff!important}.sticky-model,.sticky-registration{position:sticky;z-index:30;background:#fff}.meter-table thead .sticky-model,.meter-table thead .sticky-registration{background:#173b63;z-index:35}.sticky-registration{right:0;min-width:125px;width:125px}.sticky-model{right:125px;min-width:145px;width:145px}.registration,.strong{font-weight:700;color:#173b63}.reading{font-weight:700;color:#173b63}.positive{color:#087443;font-weight:700}.negative{color:#b42318;font-weight:700}.reference{color:#2563eb;font-weight:700}.status{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700}.status-success{color:#166534;background:#dcfce7}.status-danger{color:#991b1b;background:#fee2e2}.status-reference{color:#1d4ed8;background:#dbeafe}.history-link{color:#1769d1;font-weight:700;text-decoration:none}.empty-row{padding:30px!important;color:#64748b}.scroll-controls{display:flex;gap:6px;padding:7px 10px;background:#f8fafc;border-top:1px solid #e2e8f0}.scroll-controls button{width:32px;height:30px;border:1px solid #d4dbe3;border-radius:6px;background:#fff;cursor:pointer}.scroll-controls span{flex:1}.table-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 12px}.pagination{display:flex;gap:4px}.page-number,.page-arrow{min-width:32px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d4dbe3;border-radius:6px;text-decoration:none;color:#173b63}.page-number.active{background:#1769d1;color:#fff}.page-arrow.disabled{opacity:.45;pointer-events:none}.page-size-form{display:flex;align-items:center;gap:6px;color:#64748b;font-size:11px}.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center;padding:16px}.modal-backdrop.open{display:flex}.reading-modal{width:min(650px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:10px;padding:18px}.wide-modal{width:min(850px,96vw)}.modal-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px}.modal-head h2{margin:0;color:#173b63;font-size:19px}.modal-head p{margin:5px 0;color:#64748b;font-size:12px}.modal-close{border:0;background:transparent;font-size:26px;cursor:pointer}.reading-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.form-field{display:flex;flex-direction:column;gap:5px}.form-field.full{grid-column:1/-1}.form-field input,.form-field select{height:38px;border:1px solid #d4dbe3;border-radius:7px;padding:0 10px}.modal-actions{display:flex;gap:7px;margin-top:10px}.excel-schema{background:#f8fafc;border:1px solid #e2e8f0;padding:10px;border-radius:7px;color:#334155;font-size:12px;line-height:1.8;margin-bottom:10px}.excel-schema span{color:#64748b}.paste-area{width:100%;min-height:220px;box-sizing:border-box;direction:ltr;text-align:left;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font:12px monospace}.import-box{border:1px dashed #94a3b8;border-radius:8px;padding:20px;text-align:center;background:#f8fafc}.import-result{margin-top:10px;font-size:12px;line-height:1.8}.result-error{color:#991b1b}.result-ok{color:#166534}@media(max-width:700px){.meter-head{align-items:flex-start}.reading-form{grid-template-columns:1fr}.form-field.full{grid-column:auto}.meter-table-shell{height:calc(100vh - 430px)}}
 </style>
-
 <script>
+let selectedEquipmentId=null;
 function openReadingModal(){document.getElementById('readingModal').classList.add('open')}
-function closeReadingModal(event){if(event&&event.target!==event.currentTarget)return;document.getElementById('readingModal').classList.remove('open')}
-function openPasteModal(){document.getElementById('pasteModal').classList.add('open');document.getElementById('pasteData').focus()}
-function openImportModal(){document.getElementById('importModal').classList.add('open')}
-function closeModalById(id,event){if(event&&event.target!==event.currentTarget)return;document.getElementById(id).classList.remove('open')}
-function updateUnitHint(){const s=document.getElementById('modalEquipment');const o=s.options[s.selectedIndex];document.getElementById('unitHint').textContent=o&&o.dataset.unit==='km'?'(كم)':'(ساعة عمل)'}
-function selectRow(row){document.querySelectorAll('.meter-row.selected').forEach(el=>el.classList.remove('selected'));row.classList.add('selected')}
-function openSelectedHistory(){const row=document.querySelector('.meter-row.selected');if(!row){alert('اختر عتادًا من الجدول أولاً.');return}window.location.href='/meter-readings/history/'+row.dataset.equipmentId}
-function scrollTable(direction){const el=document.getElementById('meterTableShell');if(direction==='top'){el.scrollTop=0;return}if(direction==='bottom'){el.scrollTop=el.scrollHeight;return}el.scrollBy({left:direction==='right'?500:-500,behavior:'smooth'})}
-function setImportResult(id,message,type){const el=document.getElementById(id);el.className='import-result '+(type||'');el.innerHTML=message}
-function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
-async function submitPastedReadings(){const raw=document.getElementById('pasteData').value.trim();if(!raw){setImportResult('pasteResult','ألصق بيانات من Excel أولاً.','error');return}const lines=raw.split(/\r?\n/).filter(line=>line.trim());const rows=[];for(let i=0;i<lines.length;i++){const cells=lines[i].split('\t');if(i===0&&/رقم التسجيل|registration|immatriculation/i.test(cells[0]||''))continue;rows.push({registration:(cells[0]||'').trim(),reading_date:(cells[1]||'').trim(),value:(cells[2]||'').trim(),notes:(cells.slice(3).join('\t')||'').trim()})}try{const response=await fetch('/meter-readings/bulk-create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})});const data=await response.json();let message=`تم حفظ ${data.created||0} قراءة.`;if(data.skipped)message+=` تم تجاهل ${data.skipped} صف.`;if(data.errors&&data.errors.length)message+=`<br><strong>المشاكل:</strong><br>${data.errors.map(escapeHtml).join('<br>')}`;setImportResult('pasteResult',message,data.errors&&data.errors.length?'warning':'success');if(response.ok&&!data.errors?.length)setTimeout(()=>window.location.reload(),900)}catch(error){setImportResult('pasteResult','تعذر الاتصال بالخادم: '+escapeHtml(error.message),'error')}}
-async function submitExcelImport(){const input=document.getElementById('excelFile');if(!input.files.length){setImportResult('excelResult','اختر ملف Excel أولاً.','error');return}const form=new FormData();form.append('file',input.files[0]);try{const response=await fetch('/meter-readings/import-excel',{method:'POST',body:form});const data=await response.json();let message=`تم حفظ ${data.created||0} قراءة.`;if(data.skipped)message+=` تم تجاهل ${data.skipped} صف.`;if(data.errors&&data.errors.length)message+=`<br><strong>المشاكل:</strong><br>${data.errors.map(escapeHtml).join('<br>')}`;setImportResult('excelResult',message,data.errors&&data.errors.length?'warning':'success');if(response.ok&&!data.errors?.length)setTimeout(()=>window.location.reload(),900)}catch(error){setImportResult('excelResult','تعذر الاتصال بالخادم: '+escapeHtml(error.message),'error')}}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-backdrop.open').forEach(el=>el.classList.remove('open'))})
+function closeReadingModal(e){if(!e||e.target===e.currentTarget)document.getElementById('readingModal').classList.remove('open')}
+function openPasteModal(){document.getElementById('pasteModal').classList.add('open');document.getElementById('pasteResult').textContent=''}
+function openImportModal(){document.getElementById('importModal').classList.add('open');document.getElementById('excelResult').textContent=''}
+function closeModalById(id,e){if(!e||e.target===e.currentTarget)document.getElementById(id).classList.remove('open')}
+function updateUnitHint(){const s=document.getElementById('modalEquipment'),o=s.options[s.selectedIndex],u=o&&o.dataset.unit;document.getElementById('unitHint').textContent=u==='km'?'(كيلومترات)':u==='hours'?'(ساعات عمل)':'(اختر العتاد)'}
+function selectRow(r){document.querySelectorAll('.meter-row.selected').forEach(x=>x.classList.remove('selected'));r.classList.add('selected');selectedEquipmentId=r.dataset.equipmentId}
+function openSelectedHistory(){if(selectedEquipmentId)location.href='/meter-readings/history/'+selectedEquipmentId;else alert('اختر عتادًا أولاً.')}
+function scrollTable(d){const e=document.getElementById('meterTableShell');if(d==='right')e.scrollBy({left:400,behavior:'smooth'});if(d==='left')e.scrollBy({left:-400,behavior:'smooth'});if(d==='top')e.scrollTo({top:0,behavior:'smooth'});if(d==='bottom')e.scrollTo({top:e.scrollHeight,behavior:'smooth'})}
+function parseDateClient(v){v=(v||'').trim();if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;const m=v.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);return m?`${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`:v}
+function splitRows(t){return t.trim().split(/\r?\n/).map(x=>x.split('\t')).filter(x=>x.some(v=>v.trim()!==''))}
+async function submitPastedReadings(){const result=document.getElementById('pasteResult'),rows=splitRows(document.getElementById('pasteData').value);if(!rows.length){result.textContent='لم يتم لصق أي بيانات.';return}const payload=rows.map(c=>({registration:c[0]||'',reading_date:parseDateClient(c[1]||''),km_value:c[2]||null,hours_value:c[3]||null,notes:c[4]||''}));result.textContent='جاري المطابقة والحفظ...';try{const r=await fetch('/meter-readings/bulk-create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:payload})});const d=await r.json();result.innerHTML=`<span class="result-ok">تم تسجيل ${d.created||0} قراءة، وتخطي ${d.skipped||0}.</span>`+(d.errors&&d.errors.length?`<div class="result-error">${d.errors.join('<br>')}</div>`:'');if(r.ok&&(!d.errors||!d.errors.length))setTimeout(()=>location.reload(),900)}catch(e){result.innerHTML='<span class="result-error">تعذر الاتصال بالخادم.</span>'}}
+async function submitExcelImport(){const result=document.getElementById('excelResult'),file=document.getElementById('excelFile').files[0];if(!file){result.textContent='اختر ملف Excel أولاً.';return}result.textContent='جاري قراءة الملف ومطابقة أرقام التسجيل...';const f=new FormData();f.append('file',file);try{const r=await fetch('/meter-readings/import-excel',{method:'POST',body:f});const d=await r.json();result.innerHTML=`<span class="result-ok">تم تسجيل ${d.created||0} قراءة، وتخطي ${d.skipped||0}.</span>`+(d.errors&&d.errors.length?`<div class="result-error">${d.errors.join('<br>')}</div>`:'');if(r.ok&&(!d.errors||!d.errors.length))setTimeout(()=>location.reload(),900)}catch(e){result.innerHTML='<span class="result-error">تعذر الاتصال بالخادم.</span>'}}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-backdrop.open').forEach(x=>x.classList.remove('open'))});
 </script>
 {% endblock %}
