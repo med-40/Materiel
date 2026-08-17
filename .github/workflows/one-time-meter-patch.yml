@@ -1,0 +1,56 @@
+name: One-time meter patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/one_time_meter_patch.py
+      - .github/workflows/one-time-meter-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Apply patch
+        run: python scripts/one_time_meter_patch.py
+
+      - name: Compile
+        run: python -m compileall app
+
+      - name: Tests
+        run: pytest -q
+
+      - name: Commit application changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/modules/meter_readings/services.py app/modules/meter_readings/templates/meter_readings.html tests/test_meter_readings.py
+          git commit -m "fix: enforce meter duplicate readings and refresh UI"
+          git push
+
+      - name: Remove one-time patch files
+        run: |
+          rm -f scripts/one_time_meter_patch.py .github/workflows/one-time-meter-patch.yml
+          git add -A
+          git commit -m "chore: remove one-time meter patch"
+          git push
