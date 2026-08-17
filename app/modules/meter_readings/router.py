@@ -61,14 +61,13 @@ def _equipment_label(equipment):
 def _registration_context(db: Session, registration):
     raw = str(registration or "").strip()
     if not raw: return "العتاد غير محدد — رقم التسجيل فارغ"
-    normalized = services.normalize_registration(raw)
-    equipment = None
+    normalized = services.normalize_registration(raw); equipment = None
     if normalized:
         equipment = next((x for x in equipment_services.list_equipment(db, limit=10000) if services.normalize_registration(x.registration_number) == normalized), None)
     if equipment: return _equipment_label(equipment)
     return f"رقم التسجيل: {raw} — العتاد غير موجود في النظام"
 
-def _with_input_context(message, db, registration=None, equipment=None, row_number=None):
+def _with_input_context(message, db: Session, registration=None, equipment=None, row_number=None):
     prefix = f"الصف {row_number}: " if row_number is not None else ""
     context = _equipment_label(equipment) if equipment else _registration_context(db, registration)
     return f"{prefix}{context}. {message}"
@@ -78,17 +77,13 @@ def _annotate_bulk_errors(errors, raw_rows, db):
     import re
     for message in errors:
         match = re.search(r"الصف\s+(\d+)", str(message))
-        if not match:
-            annotated.append(message); continue
+        if not match: annotated.append(message); continue
         row_number = int(match.group(1)); row = {}
         for idx, candidate in enumerate(raw_rows, start=1):
-            if isinstance(candidate, dict) and candidate.get("_row_number", idx) == row_number:
-                row = candidate; break
+            if isinstance(candidate, dict) and candidate.get("_row_number", idx) == row_number: row = candidate; break
         registration = row.get("registration") if isinstance(row, dict) else None
-        if "رقم التسجيل:" in message or "العتاد:" in message:
-            annotated.append(message)
-        else:
-            annotated.append(_with_input_context(message, db, registration=registration))
+        if "رقم التسجيل:" in message or "العتاد:" in message: annotated.append(message)
+        else: annotated.append(_with_input_context(message, db, registration=registration))
     return annotated
 
 def _page_context(request, db, current_user, page, page_size, search, type_id, unit, sort):
@@ -125,7 +120,7 @@ def _prepare_paste_rows(raw_rows, db):
         if not isinstance(row, dict): parse_errors.append(f"الصف {index}: بيانات غير صحيحة."); continue
         registration = row.get("registration")
         try:
-            valid_rows.append({"equipment_type": row.get("equipment_type"), "registration": registration, "reading_date": _parse_date(row.get("reading_date")), "km_value": _parse_decimal(row.get("km_value")) if row.get("km_value") not in (None, "") else None, "hours_value": _parse_decimal(row.get("hours_value")) if row.get("hours_value") not in (None, "") else None, "value": _parse_decimal(row.get("value")) if row.get("value") not in (None, "") else None, "equipment_status": row.get("equipment_status"), "_row_number": index})
+            valid_rows.append({"equipment_type": row.get("model") or row.get("equipment_type"), "registration": registration, "reading_date": _parse_date(row.get("reading_date")), "km_value": _parse_decimal(row.get("km_value")) if row.get("km_value") not in (None, "") else None, "hours_value": _parse_decimal(row.get("hours_value")) if row.get("hours_value") not in (None, "") else None, "value": _parse_decimal(row.get("value")) if row.get("value") not in (None, "") else None, "equipment_status": row.get("equipment_status"), "_row_number": index})
         except ValueError as exc: parse_errors.append(_with_input_context(str(exc), db, registration=registration, row_number=index))
     return valid_rows, parse_errors
 
@@ -136,8 +131,7 @@ def meter_readings_bulk_create(payload: dict = Body(...), db: Session = Depends(
     valid_rows, parse_errors = _prepare_paste_rows(raw_rows, db)
     try:
         created, rejected, service_errors, warnings, reading_ids = services.create_bulk_readings(db, valid_rows)
-        errors = parse_errors + _annotate_bulk_errors(service_errors, raw_rows, db)
-        rejected_total = len(raw_rows) - created
+        errors = parse_errors + _annotate_bulk_errors(service_errors, raw_rows, db); rejected_total = len(raw_rows) - created
         if raw_rows: _finish_operation(db, current_user, "paste", None, len(raw_rows), reading_ids, rejected_total, errors, warnings)
     except SQLAlchemyError:
         db.rollback(); return JSONResponse(status_code=500, content={"created": 0, "skipped": len(raw_rows), "errors": [_error_card("تعذر حفظ القراءات بسبب خطأ في قاعدة البيانات.")]})
@@ -152,8 +146,9 @@ def _normalize_header(value):
 
 def _header_kind(value):
     text = _normalize_header(value)
-    exact = {"نوعالعتاد": "equipment_type", "equipmenttype": "equipment_type", "type": "equipment_type", "رقمالتسجيل": "registration", "التسجيل": "registration", "registration": "registration", "registrationnumber": "registration", "immatriculation": "registration", "matricule": "registration", "reg": "registration", "التاريخ": "date", "تاريخالقراءه": "date", "تاريخالقراءة": "date", "readingdate": "date", "date": "date", "الكيلومترات": "km", "كيلومترات": "km", "الكيلومتر": "km", "كيلومتر": "km", "الكم": "km", "عدادالكم": "km", "عدادالكلم": "km", "عدادالكيلومترات": "km", "عدادكم": "km", "الكلم": "km", "كلم": "km", "كم": "km", "km": "km", "kilometers": "km", "kilometres": "km", "odometer": "km", "الساعات": "hours", "ساعات": "hours", "ساعة": "hours", "عدادالساعات": "hours", "hours": "hours", "hour": "hours", "hourmeter": "hours", "القراءة": "legacy", "قيمهالعداد": "legacy", "قيمةالعداد": "legacy", "reading": "legacy", "value": "legacy", "meter": "legacy", "meterreading": "legacy", "حالهالعداد": "status", "حالةالعداد": "status", "status": "status", "equipmentstatus": "status", "operationalstatus": "status"}
+    exact = {"الطراز": "equipment_type", "model": "equipment_type", "equipmentmodel": "equipment_type", "نوعالعتاد": "equipment_type", "equipmenttype": "equipment_type", "type": "equipment_type", "رقمالتسجيل": "registration", "التسجيل": "registration", "registration": "registration", "registrationnumber": "registration", "immatriculation": "registration", "matricule": "registration", "reg": "registration", "التاريخ": "date", "تاريخالقراءه": "date", "تاريخالقراءة": "date", "readingdate": "date", "date": "date", "الكيلومترات": "km", "كيلومترات": "km", "الكيلومتر": "km", "كيلومتر": "km", "الكم": "km", "عدادالكم": "km", "عدادالكلم": "km", "عدادالكيلومترات": "km", "عدادكم": "km", "الكلم": "km", "كلم": "km", "كم": "km", "km": "km", "kilometers": "km", "kilometres": "km", "odometer": "km", "الساعات": "hours", "ساعات": "hours", "ساعة": "hours", "عدادالساعات": "hours", "hours": "hours", "hour": "hours", "hourmeter": "hours", "القراءة": "legacy", "قيمهالعداد": "legacy", "قيمةالعداد": "legacy", "reading": "legacy", "value": "legacy", "meter": "legacy", "meterreading": "legacy", "حالهالعداد": "status", "حالةالعداد": "status", "status": "status", "equipmentstatus": "status", "operationalstatus": "status"}
     if text in exact: return exact[text]
+    if "طراز" in text or text.endswith("model"): return "equipment_type"
     if "نوع" in text and "عتاد" in text: return "equipment_type"
     if "تسجيل" in text or "registration" in text or "immatriculation" in text or "matricule" in text: return "registration"
     if "تاريخ" in text or text.endswith("date"): return "date"
@@ -175,7 +170,7 @@ def _read_excel_rows(file, db):
             kind = _header_kind(value)
             if kind and kind not in kinds: kinds[kind] = idx
         if {"equipment_type", "registration", "date", "status"}.issubset(kinds) and ({"km", "hours", "legacy"} & set(kinds)): header_info = (row_number, kinds); break
-    if header_info is None: raise ValueError("لم يتم التعرف على أعمدة Excel. يجب أن يحتوي الملف على: نوع العتاد، رقم التسجيل، التاريخ، العداد، وحالة العداد.")
+    if header_info is None: raise ValueError("لم يتم التعرف على أعمدة Excel. يجب أن يحتوي الملف على: الطراز، رقم التسجيل، التاريخ، العداد، وحالة العداد.")
     header_row, columns = header_info; import_rows, parse_errors, data_row_count = [], [], 0
     for row_number, values in enumerate(rows[header_row:], start=header_row + 1):
         if not any(value is not None and str(value).strip() for value in values): continue
@@ -190,10 +185,8 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
     filename = file.filename or ""
     if not filename.lower().endswith(".xlsx"): return JSONResponse(status_code=400, content={"created": 0, "skipped": 0, "errors": [_error_card("الملف يجب أن يكون بصيغة Excel .xlsx.")]})
     try:
-        import_rows, parse_errors, data_row_count = _read_excel_rows(file, db)
-        created, rejected, service_errors, warnings, reading_ids = services.create_bulk_readings(db, import_rows)
-        errors = parse_errors + _annotate_bulk_errors(service_errors, import_rows, db)
-        rejected_total = data_row_count - created
+        import_rows, parse_errors, data_row_count = _read_excel_rows(file, db); created, rejected, service_errors, warnings, reading_ids = services.create_bulk_readings(db, import_rows)
+        errors = parse_errors + _annotate_bulk_errors(service_errors, import_rows, db); rejected_total = data_row_count - created
         op = _finish_operation(db, current_user, "excel", filename, data_row_count, reading_ids, rejected_total, errors, warnings) if data_row_count else None
         cards = [_error_card(x) for x in errors[:100]] + [_warning_card(x) for x in warnings[:100]]
         return JSONResponse({"ok": not errors, "created": created, "skipped": rejected_total, "errors": cards, "message": "تم استيراد القراءات الصحيحة، مع وجود أخطاء تحتاج للمراجعة." if errors else "تم استيراد القراءات بنجاح.", "operation_id": op.id if op else None})
