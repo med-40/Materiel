@@ -23,8 +23,10 @@ class RawWorkbook:
 
 def _clean_header_text(value):
     if value is None: return ""
+    # Keep Excel numbers/dates as their original types; only clean text cells.
+    if not isinstance(value, str): return value
     # Excel may preserve RTL/LTR marks and zero-width characters in copied headers.
-    text = str(value).replace("\ufeff", "")
+    text = value.replace("\ufeff", "")
     text = "".join(ch for ch in text if ch not in "\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
     return text.strip()
 
@@ -39,7 +41,7 @@ def _normalize_import_headers(workbook):
                     cell.value = "نوع العتاد"
                 elif value == "حاله العداد":
                     cell.value = "حالة العداد"
-                elif value:
+                elif isinstance(value, str) and value:
                     cell.value = value
     except Exception:
         pass
