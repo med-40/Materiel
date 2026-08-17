@@ -1,73 +1,58 @@
 from __future__ import annotations
-
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Optional, Iterable
-
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
-
 from app.modules.equipment.models import Equipment
 from app.modules.equipment_types.models import EquipmentType
 from app.modules.meter_readings.models import MeterReading
 
-
 def _unit(equipment: Equipment) -> str:
     return equipment.equipment_type.measurement_unit if equipment.equipment_type else "hours"
-
 def _value(reading: MeterReading | None, unit: str):
     if reading is None: return None
     return reading.odometer if unit == "km" else reading.hours
-
 def _fmt(value) -> str:
     if value is None: return "—"
     value = Decimal(value)
     if value == value.to_integral_value(): return f"{int(value):,}"
     return f"{value:,.1f}"
-
 def _fmt_difference(value) -> str:
     if value is None: return "—"
     value = Decimal(value)
     if value < 0: return "غير صالح"
     if value == value.to_integral_value(): return f"+{int(value):,}"
     return f"+{value:,.1f}"
-
 def _difference(current: MeterReading, previous: MeterReading | None, unit: str):
     current_value = _value(current, unit); previous_value = _value(previous, unit)
     if current_value is None or previous_value is None: return None
     return Decimal(current_value) - Decimal(previous_value)
-
 def _equipment_status_label(equipment: Equipment) -> tuple[str, str]:
     value = str(equipment.operational_status or "available").strip().lower()
     if value in {"unavailable", "not_working", "not-working", "stopped", "out_of_service", "out-of-service"}: return "لا يعمل", "danger"
     return "يعمل", "success"
-
 def normalize_equipment_status(value) -> str:
     text = str(value or "").strip().lower()
     if text in {"لا يعمل", "لايعمل", "غير متاح", "غيرمتاح", "unavailable", "not_working", "not-working", "stopped", "out_of_service", "out-of-service"}: return "unavailable"
     return "available"
-
 def parse_equipment_status(value) -> str:
     text = str(value or "").strip().lower()
     if text in {"يعمل", "يشتغل", "متاح", "available", "working", "on"}: return "available"
     if text in {"لا يعمل", "لايعمل", "غير متاح", "غيرمتاح", "unavailable", "not_working", "not-working", "stopped", "out_of_service", "out-of-service", "off"}: return "unavailable"
     raise ValueError("حالة العداد غير صحيحة؛ يجب أن تكون «يعمل» أو «لا يعمل».")
-
 def normalize_registration(value) -> str:
     if value is None: return ""
     text = str(value).strip().upper()
     if text.endswith(".0") and text[:-2].isdigit(): text = text[:-2]
     return "".join(ch for ch in text if ch.isalnum())
-
 def _parse_decimal(value) -> Decimal:
     text = str(value).strip().replace(" ", "").replace(",", "")
     text = text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("٫", ".")
     try: return Decimal(text)
     except (InvalidOperation, ValueError) as exc: raise ValueError("قيمة العداد غير صحيحة") from exc
-
 def list_readings(db: Session, equipment_id: int) -> list[MeterReading]:
     return db.query(MeterReading).filter(MeterReading.equipment_id == equipment_id).order_by(MeterReading.reading_date.asc(), MeterReading.id.asc()).all()
-
 def _validate_reading_position(db: Session, equipment_id: int, reading_date: datetime, value: Decimal, unit: str):
     for existing in list_readings(db, equipment_id):
         existing_value = _value(existing, unit)
@@ -76,17 +61,14 @@ def _validate_reading_position(db: Session, equipment_id: int, reading_date: dat
         if existing.reading_date < reading_date and existing_value > value:
             raise ValueError(f"لا يمكن حفظ القراءة بتاريخ {reading_date:%d/%m/%Y}: قيمتها ({value:g}) أقل من القراءة المسجلة بتاريخ {existing.reading_date:%d/%m/%Y} ({existing_value:g}). القيمة غير منطقية، راجع القراءة ولم يتم حفظها.")
         if existing.reading_date > reading_date and existing_value < value:
-            raise ValueError(f"لا يمكن إدخال قراءة بتاريخ {reading_date:%d/%m/%Y}: قيمتها ({value:g}) أكبر من القراءة اللاحقة بتاريخ {existing.reading_date:%d/%m/%Y} ({existing_value:g}). القراءة غير منطقية، راجع القيمة ولم يتم حفظها.")
-
+            raise ValueError(f"لا يمكن إدخال قراءة بتاريخ {reading_date:%d/%m/%Y}: قيمتها ({value:g}) أكبر من القراءة اللاحقة بتاريخ {existing.reading_date:%d/%m/%Y} ({existing_value:g}). القيمة غير منطقية، راجع القراءة ولم يتم حفظها.")
 def _refresh_equipment_current(db: Session, equipment: Equipment, unit: str):
     latest = db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).order_by(MeterReading.reading_date.desc(), MeterReading.id.desc()).first()
     if unit == "km": equipment.current_odometer = _value(latest, unit)
     else: equipment.current_hours = _value(latest, unit)
-
 def cleanup_invalid_readings(db: Session):
     today = datetime.now(timezone.utc).date(); cutoff = datetime.combine(today, datetime.max.time())
-    invalid = db.query(MeterReading).filter(MeterReading.reading_date > cutoff).all()
-    invalid += db.query(MeterReading).filter((MeterReading.odometer < 0) | (MeterReading.hours < 0)).all()
+    invalid = db.query(MeterReading).filter(MeterReading.reading_date > cutoff).all(); invalid += db.query(MeterReading).filter((MeterReading.odometer < 0) | (MeterReading.hours < 0)).all()
     unique = {item.id: item for item in invalid}
     if not unique: return 0
     equipment_ids = {item.equipment_id for item in unique.values()}
@@ -96,7 +78,6 @@ def cleanup_invalid_readings(db: Session):
         equipment = get_equipment_with_readings(db, equipment_id)
         if equipment: _refresh_equipment_current(db, equipment, _unit(equipment))
     db.commit(); return len(unique)
-
 def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: str = "", type_id: Optional[int] = None, unit: str = "", sort: str = "date_desc"):
     page = max(1, page); page_size = min(max(1, page_size), 100)
     latest_dates = db.query(MeterReading.equipment_id.label("equipment_id"), func.max(MeterReading.reading_date).label("latest_date")).group_by(MeterReading.equipment_id).subquery()
@@ -109,8 +90,7 @@ def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: st
     if sort == "registration": query = query.order_by(Equipment.registration_number.asc(), Equipment.id.asc())
     elif sort == "date_asc": query = query.order_by(latest_dates.c.latest_date.asc(), Equipment.id.asc())
     else: query = query.order_by(latest_dates.c.latest_date.desc(), Equipment.id.asc())
-    selected = query.offset((page - 1) * page_size).limit(page_size).all(); equipment_ids = [equipment.id for equipment, _ in selected]
-    history = {equipment_id: [] for equipment_id in equipment_ids}
+    selected = query.offset((page - 1) * page_size).limit(page_size).all(); equipment_ids = [equipment.id for equipment, _ in selected]; history = {equipment_id: [] for equipment_id in equipment_ids}
     if equipment_ids:
         readings = db.query(MeterReading).filter(MeterReading.equipment_id.in_(equipment_ids)).order_by(MeterReading.equipment_id.asc(), MeterReading.reading_date.desc(), MeterReading.id.desc()).all()
         for reading in readings:
@@ -118,27 +98,22 @@ def list_latest_rows(db: Session, page: int = 1, page_size: int = 10, search: st
             if len(bucket) < 2: bucket.append(reading)
     rows = []
     for number, (equipment, _) in enumerate(selected, start=(page - 1) * page_size + 1):
-        unit_code = _unit(equipment); latest = history[equipment.id][0] if history[equipment.id] else None; previous = history[equipment.id][1] if len(history[equipment.id]) > 1 else None
-        difference = _difference(latest, previous, unit_code) if latest else None; equipment_status, status_class = _equipment_status_label(equipment)
+        unit_code = _unit(equipment); latest = history[equipment.id][0] if history[equipment.id] else None; previous = history[equipment.id][1] if len(history[equipment.id]) > 1 else None; difference = _difference(latest, previous, unit_code) if latest else None; equipment_status, status_class = _equipment_status_label(equipment)
         rows.append({"number": number, "equipment_id": equipment.id, "model": equipment.equipment_model.name if equipment.equipment_model else "—", "type_name": equipment.equipment_type.name if equipment.equipment_type else "—", "registration": equipment.registration_number or equipment.asset_code or "—", "location": "—", "unit": "كم" if unit_code == "km" else "ساعة عمل", "unit_code": unit_code, "date": latest.reading_date.strftime("%d/%m/%Y") if latest else "—", "reading": _fmt(_value(latest, unit_code)), "difference": _fmt_difference(difference), "note": latest.notes if latest and latest.notes else "—", "status": equipment_status, "status_class": status_class})
     last_update = db.query(func.max(MeterReading.reading_date)).scalar(); last_update_text = last_update.strftime("%d/%m/%Y") if last_update else "—"; pages = (total + page_size - 1) // page_size if total else 1
     return rows, total, pages, last_update_text
-
 def get_equipment_with_readings(db: Session, equipment_id: int):
     return db.query(Equipment).options(joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model)).filter(Equipment.id == equipment_id).first()
-
 def history_rows(db: Session, equipment_id: int, page: int = 1, page_size: int = 20):
     equipment = get_equipment_with_readings(db, equipment_id)
     if not equipment: return None, [], 0, 1, 1
     page = max(1, page); page_size = min(max(1, page_size), 100); unit_code = _unit(equipment)
     ordered = db.query(MeterReading.id.label("id"), MeterReading.reading_date.label("reading_date"), MeterReading.odometer.label("odometer"), MeterReading.hours.label("hours"), MeterReading.notes.label("notes"), func.lag(MeterReading.odometer).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.desc(), MeterReading.id.desc())).label("previous_odometer"), func.lag(MeterReading.hours).over(partition_by=MeterReading.equipment_id, order_by=(MeterReading.reading_date.desc(), MeterReading.id.desc())).label("previous_hours")).filter(MeterReading.equipment_id == equipment_id).subquery()
-    total = db.query(func.count()).select_from(ordered).scalar() or 0; pages = max(1, (total + page_size - 1) // page_size); page = min(page, pages)
-    rows_data = db.query(ordered).order_by(ordered.c.reading_date.desc(), ordered.c.id.desc()).offset((page - 1) * page_size).limit(page_size).all(); equipment_status, status_class = _equipment_status_label(equipment); rows = []
+    total = db.query(func.count()).select_from(ordered).scalar() or 0; pages = max(1, (total + page_size - 1) // page_size); page = min(page, pages); rows_data = db.query(ordered).order_by(ordered.c.reading_date.desc(), ordered.c.id.desc()).offset((page - 1) * page_size).limit(page_size).all(); equipment_status, status_class = _equipment_status_label(equipment); rows = []
     for number, row in enumerate(rows_data, start=(page - 1) * page_size + 1):
         current_value = row.odometer if unit_code == "km" else row.hours; previous_value = row.previous_odometer if unit_code == "km" else row.previous_hours; difference = Decimal(current_value) - Decimal(previous_value) if current_value is not None and previous_value is not None else None
         rows.append({"number": number, "id": row.id, "date": row.reading_date.strftime("%d/%m/%Y"), "odometer": _fmt(row.odometer), "hours": _fmt(row.hours), "reading": _fmt(current_value), "difference": _fmt_difference(difference), "note": row.notes or "—", "status": equipment_status, "status_class": status_class, "unit": "كم" if unit_code == "km" else "ساعة عمل"})
     return equipment, rows, total, pages, page
-
 def create_reading(db: Session, equipment_id: int, odometer=None, hours=None, reading_date: datetime | None = None, notes: str | None = None, equipment_status: str = "available") -> MeterReading:
     equipment = get_equipment_with_readings(db, equipment_id)
     if not equipment: raise ValueError("العتاد غير موجود")
@@ -153,7 +128,7 @@ def create_reading(db: Session, equipment_id: int, odometer=None, hours=None, re
     db.add(reading); db.flush(); _refresh_equipment_current(db, equipment, unit_code); db.commit(); db.refresh(reading); return reading
 
 def create_bulk_readings(db: Session, rows: Iterable[dict]):
-    """Validate/import bulk rows. The identity column is the equipment model, matched with the registration number."""
+    """Validate/import bulk rows. New imports use the equipment model; legacy callers may still send equipment_type."""
     clean_rows = list(rows)
     if not clean_rows: return 0, 0, [], [], []
     equipment_list = db.query(Equipment).options(joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model)).filter(Equipment.registration_number.isnot(None)).all()
@@ -164,11 +139,18 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         if not registration: errors.append(f"الصف {row_number}: رقم التسجيل فارغ."); continue
         equipment = equipment_map.get(registration)
         if not equipment: errors.append(f"الصف {row_number}: رقم التسجيل {registration_raw} غير موجود في النظام."); continue
-        equipment_model_raw = row.get("equipment_type")
-        if equipment_model_raw is None or not str(equipment_model_raw).strip(): errors.append(f"الصف {row_number}: الطراز فارغ للعتاد ذي رقم التسجيل {registration_raw}."); continue
-        expected_model = str(equipment.equipment_model.name if equipment.equipment_model else "").strip(); supplied_model = " ".join(str(equipment_model_raw).strip().split()).casefold()
-        if expected_model and supplied_model != " ".join(expected_model.split()).casefold():
-            errors.append(f"الصف {row_number}: الطراز «{equipment_model_raw}» لا يطابق الطراز المسجل «{expected_model}» للعتاد ذي رقم التسجيل {registration_raw}."); continue
+        model_raw = row.get("equipment_model")
+        legacy_type_raw = row.get("equipment_type")
+        if model_raw is not None:
+            supplied = " ".join(str(model_raw).strip().split()).casefold(); expected = str(equipment.equipment_model.name if equipment.equipment_model else "").strip()
+            if not str(model_raw).strip(): errors.append(f"الصف {row_number}: الطراز فارغ للعتاد ذي رقم التسجيل {registration_raw}."); continue
+            if expected and supplied != " ".join(expected.split()).casefold():
+                errors.append(f"الصف {row_number}: الطراز «{model_raw}» لا يطابق الطراز المسجل «{expected}» للعتاد ذي رقم التسجيل {registration_raw}."); continue
+        else:
+            if legacy_type_raw is None or not str(legacy_type_raw).strip(): errors.append(f"الصف {row_number}: نوع العتاد فارغ."); continue
+            expected_type = str(equipment.equipment_type.name if equipment.equipment_type else "").strip(); supplied_type = " ".join(str(legacy_type_raw).strip().split()).casefold()
+            if expected_type and supplied_type != " ".join(expected_type.split()).casefold():
+                errors.append(f"الصف {row_number}: نوع العتاد «{legacy_type_raw}» لا يطابق النوع المسجل «{expected_type}» لرقم التسجيل {registration_raw}."); continue
         reading_date = row.get("reading_date")
         if not isinstance(reading_date, datetime): errors.append(f"الصف {row_number}: تاريخ القراءة غير صحيح."); continue
         if reading_date.date() > datetime.now(timezone.utc).date(): errors.append(f"الصف {row_number}: تاريخ القراءة {reading_date:%d/%m/%Y} مستقبلي، ولم يتم حفظ القراءة."); continue
