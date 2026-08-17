@@ -20,13 +20,11 @@ from app.modules.users.models import User
 router = APIRouter(prefix="/meter-readings", tags=["Meter Readings"])
 templates = get_module_templates("app/modules/meter_readings/templates")
 
-
 def _parse_type_id(value: str | None) -> Optional[int]:
     if value is None or not str(value).strip(): return None
     try: parsed = int(str(value).strip())
     except (ValueError, TypeError): return None
     return parsed if parsed > 0 else None
-
 
 def _parse_decimal(value):
     if value is None or str(value).strip() == "": raise ValueError("قيمة العداد فارغة")
@@ -34,7 +32,6 @@ def _parse_decimal(value):
     text = text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("٫", ".")
     try: return Decimal(text)
     except InvalidOperation as exc: raise ValueError("قيمة العداد غير صحيحة") from exc
-
 
 def _parse_date(value):
     if isinstance(value, datetime): return value
@@ -50,20 +47,16 @@ def _parse_date(value):
         except ValueError: continue
     raise ValueError("تاريخ القراءة غير صحيح")
 
-
 def _error_card(message: str, title: str = "خطأ في البيانات"):
     safe = escape(str(message)); return f'<div class="error-card">⚠️ <strong>{escape(title)}</strong><span>{safe}</span></div>'
 
-
 def _warning_card(message: str): return f'<div class="warning-card">⚠️ <strong>تنبيه</strong><span>{escape(str(message))}</span></div>'
-
 
 def _equipment_label(equipment):
     if not equipment: return "العتاد غير محدد"
     model = equipment.equipment_model.name if getattr(equipment, "equipment_model", None) else "—"
     registration = equipment.registration_number or equipment.asset_code or "—"
     return f"العتاد: {model} — رقم التسجيل: {registration}"
-
 
 def _registration_context(db: Session, registration):
     raw = str(registration or "").strip()
@@ -75,22 +68,22 @@ def _registration_context(db: Session, registration):
     if equipment: return _equipment_label(equipment)
     return f"رقم التسجيل: {raw} — العتاد غير موجود في النظام"
 
-
 def _with_input_context(message, db, registration=None, equipment=None, row_number=None):
     prefix = f"الصف {row_number}: " if row_number is not None else ""
     context = _equipment_label(equipment) if equipment else _registration_context(db, registration)
     return f"{prefix}{context}. {message}"
 
-
 def _annotate_bulk_errors(errors, raw_rows, db):
     annotated = []
+    import re
     for message in errors:
-        import re
         match = re.search(r"الصف\s+(\d+)", str(message))
         if not match:
             annotated.append(message); continue
-        row_number = int(match.group(1))
-        row = raw_rows[row_number - 1] if 1 <= row_number <= len(raw_rows) else {}
+        row_number = int(match.group(1)); row = {}
+        for idx, candidate in enumerate(raw_rows, start=1):
+            if isinstance(candidate, dict) and candidate.get("_row_number", idx) == row_number:
+                row = candidate; break
         registration = row.get("registration") if isinstance(row, dict) else None
         if "رقم التسجيل:" in message or "العتاد:" in message:
             annotated.append(message)
@@ -98,23 +91,19 @@ def _annotate_bulk_errors(errors, raw_rows, db):
             annotated.append(_with_input_context(message, db, registration=registration))
     return annotated
 
-
 def _page_context(request, db, current_user, page, page_size, search, type_id, unit, sort):
     rows, total, pages, last_update = services.list_latest_rows(db, page=page, page_size=page_size, search=search, type_id=type_id, unit=unit, sort=sort)
     return {"request": request, "user": current_user, "readings": rows, "equipment_options": equipment_services.list_equipment(db, limit=10000), "types": type_services.list_types(db), "total": total, "page": page, "page_size": page_size, "pages": pages, "search": search, "type_id": type_id, "unit": unit, "sort": sort, "last_update": last_update}
 
-
 def _finish_operation(db: Session, current_user: User, kind: str, filename: str | None, total_rows: int, reading_ids: list[int], rejected_rows: int, errors: list[str], warnings: list[str]):
     op = create_operation(db, kind=kind, user_id=getattr(current_user, "id", None), filename=filename, total_rows=total_rows, reading_ids=reading_ids, rejected_rows=rejected_rows)
     add_validation_details(db, op.id, getattr(current_user, "id", None), errors=errors, warnings=warnings); db.commit(); return op
-
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def meter_readings_page(request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, ge=5, le=100), search: str = Query(""), type_id: str | None = Query(default=None), unit: str = Query(""), sort: str = Query("date_desc"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     services.cleanup_invalid_readings(db)
     return templates.TemplateResponse("meter_readings.html", _page_context(request, db, current_user, page, page_size, search, _parse_type_id(type_id), unit, sort))
-
 
 @router.post("/create")
 def meter_reading_create(equipment_id: int = Form(...), reading_date: str = Form(...), value: str = Form(...), equipment_status: str | None = Form(None), notes: str = Form(""), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -130,7 +119,6 @@ def meter_reading_create(equipment_id: int = Form(...), reading_date: str = Form
         db.rollback(); raise HTTPException(status_code=500, detail=f"{context}. تعذر حفظ القراءة بسبب خطأ في قاعدة البيانات.")
     return JSONResponse({"ok": True, "message": "تم حفظ القراءة بنجاح", "reading_id": reading.id})
 
-
 def _prepare_paste_rows(raw_rows, db):
     valid_rows, parse_errors = [], []
     for index, row in enumerate(raw_rows, start=1):
@@ -140,7 +128,6 @@ def _prepare_paste_rows(raw_rows, db):
             valid_rows.append({"equipment_type": row.get("equipment_type"), "registration": registration, "reading_date": _parse_date(row.get("reading_date")), "km_value": _parse_decimal(row.get("km_value")) if row.get("km_value") not in (None, "") else None, "hours_value": _parse_decimal(row.get("hours_value")) if row.get("hours_value") not in (None, "") else None, "value": _parse_decimal(row.get("value")) if row.get("value") not in (None, "") else None, "equipment_status": row.get("equipment_status"), "_row_number": index})
         except ValueError as exc: parse_errors.append(_with_input_context(str(exc), db, registration=registration, row_number=index))
     return valid_rows, parse_errors
-
 
 @router.post("/bulk-create")
 def meter_readings_bulk_create(payload: dict = Body(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -157,13 +144,11 @@ def meter_readings_bulk_create(payload: dict = Body(...), db: Session = Depends(
     cards = [_error_card(x) for x in errors[:100]] + [_warning_card(x) for x in warnings[:100]]
     return JSONResponse({"ok": not errors, "created": created, "skipped": rejected_total, "errors": cards, "message": "تم حفظ القراءات الصحيحة، مع وجود أخطاء تحتاج للمراجعة." if errors else "تم الحفظ بنجاح."})
 
-
 def _normalize_header(value):
     if value is None: return ""
     text = str(value).strip().lower()
     for old, new in {"أ": "ا", "إ": "ا", "آ": "ا", "ة": "ه", "ى": "ي", "ـ": "", "ٱ": "ا", "ؤ": "و", "ئ": "ي"}.items(): text = text.replace(old, new)
     return "".join(ch for ch in text if ch.isalnum())
-
 
 def _header_kind(value):
     text = _normalize_header(value)
@@ -178,9 +163,7 @@ def _header_kind(value):
     if "قراء" in text or "value" in text or "meter" in text: return "legacy"
     return None
 
-
 def _cell(values, idx): return values[idx] if idx is not None and idx < len(values) else None
-
 
 def _read_excel_rows(file, db):
     workbook = load_meter_workbook(file.file); sheet = workbook.active; rows = list(sheet.iter_rows(values_only=True))
@@ -202,7 +185,6 @@ def _read_excel_rows(file, db):
         except ValueError as exc: parse_errors.append(_with_input_context(str(exc), db, registration=registration, row_number=row_number))
     return import_rows, parse_errors, data_row_count
 
-
 @router.post("/import-excel")
 def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: str | None = Form(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     filename = file.filename or ""
@@ -222,11 +204,9 @@ def meter_readings_import_excel(file: UploadFile = File(...), equipment_status: 
     except Exception as exc:
         db.rollback(); return JSONResponse(status_code=500, content={"created": 0, "skipped": 0, "errors": [_error_card(f"تعذر قراءة ملف Excel: {exc}", "تعذر قراءة ملف Excel")]})
 
-
 @router.post("/import-excel-preview")
 def meter_readings_import_excel_preview(file: UploadFile = File(...), equipment_status: str | None = Form(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return meter_readings_import_excel(file, equipment_status, db, current_user)
-
 
 @router.get("/history/{equipment_id}", response_class=HTMLResponse)
 def meter_history_page(equipment_id: int, request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, ge=5, le=100), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
