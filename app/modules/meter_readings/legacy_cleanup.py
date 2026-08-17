@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session, joinedload
@@ -19,7 +19,7 @@ def cleanup_legacy_readings(db: Session) -> int:
     service validation; this repair only cleans data that predates those
     protections.
     """
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     readings = (
         db.query(MeterReading)
         .options(joinedload(MeterReading.equipment).joinedload(Equipment.equipment_type))
