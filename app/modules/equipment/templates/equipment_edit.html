@@ -31,9 +31,15 @@
             <label>الطراز</label>
             <select name="equipment_model_id" id="edit-model-select">
                 <option value="">بدون طراز محدد</option>
-                {% if item.equipment_model %}
-                <option value="{{ item.equipment_model.id }}" selected>{{ item.equipment_model.name }}</option>
-                {% endif %}
+                {% for t in types %}
+                    {% for m in t.models %}
+                    <option value="{{ m.id }}" data-type-id="{{ t.id }}"
+                            {% if m.id == item.equipment_model_id %}selected{% endif %}
+                            {% if t.id != item.equipment_type_id %}hidden{% endif %}>
+                        {{ m.name }}
+                    </option>
+                    {% endfor %}
+                {% endfor %}
             </select>
         </div>
 
@@ -85,51 +91,37 @@
 </div>
 
 <script>
+function showEditServerModels(typeId, selectedModelId = '') {
+    const modelSelect = document.getElementById('edit-model-select');
+    if (!modelSelect) return;
+
+    const modelOptions = modelSelect.querySelectorAll('option[data-type-id]');
+    modelOptions.forEach(option => {
+        const visible = option.dataset.typeId === String(typeId);
+        option.hidden = !visible;
+        option.style.display = visible ? '' : 'none';
+    });
+
+    const matchingOption = Array.from(modelOptions).find(
+        option => option.dataset.typeId === String(typeId) && String(option.value) === String(selectedModelId)
+    );
+
+    modelSelect.value = matchingOption ? matchingOption.value : '';
+}
+
 async function onEditTypeChange() {
     const typeSelect = document.getElementById('edit-type-select');
     const modelSelect = document.getElementById('edit-model-select');
     if (!typeSelect || !modelSelect) return;
 
     const typeId = typeSelect.value;
-    modelSelect.disabled = true;
-    modelSelect.innerHTML = '<option value="">جاري تحميل الطرازات...</option>';
-
-    if (!typeId) {
-        modelSelect.innerHTML = '<option value="">بدون طراز محدد</option>';
-        modelSelect.disabled = false;
-        return;
-    }
-
-    try {
-        const response = await fetch(
-            '/api/equipment-types/' + encodeURIComponent(typeId) + '/models',
-            {
-                method: 'GET',
-                headers: {'Accept': 'application/json'},
-                credentials: 'same-origin'
-            }
-        );
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-
-        const models = await response.json();
-        const currentModelId = '{{ item.equipment_model_id or "" }}';
-        modelSelect.innerHTML = '<option value="">بدون طراز محدد</option>';
-
-        if (Array.isArray(models)) {
-            models.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                option.textContent = model.name;
-                if (String(model.id) === String(currentModelId)) option.selected = true;
-                modelSelect.appendChild(option);
-            });
-        }
-    } catch (error) {
-        console.error('خطأ في تحميل الطرازات:', error);
-        modelSelect.innerHTML = '<option value="">تعذر تحميل الطرازات</option>';
-    } finally {
-        modelSelect.disabled = false;
-    }
+    showEditServerModels(typeId);
+    modelSelect.disabled = false;
 }
+
+showEditServerModels(
+    document.getElementById('edit-type-select')?.value,
+    '{{ item.equipment_model_id or "" }}'
+);
 </script>
 {% endblock %}
