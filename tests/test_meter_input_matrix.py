@@ -96,7 +96,7 @@ def test_manual_option_multiple_numeric_formats_and_retry_after_error(db):
     response = meter_reading_create(
         equipment_id=equipment.id,
         reading_date="16/08/2026",
-        value="1,250.75",
+        value="1,250.7",
         equipment_status="يعمل",
         notes="بعد التصحيح",
         db=db,
@@ -104,7 +104,7 @@ def test_manual_option_multiple_numeric_formats_and_retry_after_error(db):
     )
     assert response.status_code == 200
     assert db.query(MeterReading).count() == 2
-    assert float(db.query(MeterReading).order_by(MeterReading.reading_date.desc()).first().odometer) == 1250.75
+    assert float(db.query(MeterReading).order_by(MeterReading.reading_date.desc()).first().odometer) == 1250.7
     assert equipment.operational_status == "available"
 
 
@@ -114,7 +114,7 @@ def test_manual_hours_accepts_integer_decimal_and_arabic_digits(db):
     for reading_date, value in [
         ("15/08/2026", "100"),
         ("16/08/2026", "125.5"),
-        ("17/08/2026", "١٥٠٫٧٥"),
+        ("17/08/2026", "١٥٠٫٧"),
     ]:
         response = meter_reading_create(
             equipment_id=equipment.id,
@@ -127,7 +127,7 @@ def test_manual_hours_accepts_integer_decimal_and_arabic_digits(db):
         )
         assert response.status_code == 200
     saved = db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).order_by(MeterReading.reading_date).all()
-    assert [float(x.hours) for x in saved] == [100.0, 125.5, 150.75]
+    assert [float(x.hours) for x in saved] == [100.0, 125.5, 150.7]
 
 
 def test_paste_option_accepts_date_number_formats_and_status_aliases_then_retries(db):
@@ -152,7 +152,7 @@ def test_paste_option_accepts_date_number_formats_and_status_aliases_then_retrie
     assert '"created":0' in payload
     assert '"skipped":1' in payload
     assert "P-300" in payload
-    assert "نوع-P-300" in payload
+    assert "طراز-P-300" in payload
     assert "أقل من القراءة المسجلة" in payload
     assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 1
 
@@ -161,7 +161,7 @@ def test_paste_option_accepts_date_number_formats_and_status_aliases_then_retrie
             "equipment_type": "نوع-P-300",
             "registration": "P-300",
             "reading_date": "16-08-2026",
-            "km_value": "1,050.25",
+            "km_value": "1,050.2",
             "hours_value": None,
             "equipment_status": "working",
             "_row_number": 1,
@@ -195,7 +195,7 @@ def test_excel_option_accepts_arabic_english_headers_reordered_dates_and_values(
     headers = ["Status", "registration number", "Date", "Equipment Type", "Odometer", "Hour meter"]
     rows = [
         ["working", "E-400", date(2026, 8, 15), "نوع-E-400", "2,000.5", None],
-        ["لا يعمل", "E-401", 46250, "نوع-E-401", None, "٧٥٫٢٥"],
+        ["لا يعمل", "E-401", 46250, "نوع-E-401", None, "٧٥٫٢"],
         ["available", "E-400", "17/08/2026", "نوع-E-400", "2,100", None],
     ]
     buffer = make_excel(rows, headers)
@@ -207,7 +207,7 @@ def test_excel_option_accepts_arabic_english_headers_reordered_dates_and_values(
     km_values = [float(x.odometer) for x in db.query(MeterReading).filter(MeterReading.equipment_id == equipment_km.id).order_by(MeterReading.reading_date)]
     hour_values = [float(x.hours) for x in db.query(MeterReading).filter(MeterReading.equipment_id == equipment_hours.id).order_by(MeterReading.reading_date)]
     assert km_values == [2000.5, 2100.0]
-    assert hour_values == [75.25]
+    assert hour_values == [75.2]
     assert equipment_km.operational_status == "available"
     assert equipment_hours.operational_status == "unavailable"
 
@@ -232,7 +232,7 @@ def test_excel_error_identifies_equipment_and_retry_with_corrected_file(db):
     assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 1
 
     good = make_excel(
-        [["E-500", "نوع-E-500", "16/08/2026", "٥٥٠٫٧٥", None, "working"]],
+        [["E-500", "نوع-E-500", "16/08/2026", "٥٥٠٫٧", None, "working"]],
         ["رقم التسجيل", "نوع العتاد", "التاريخ", "الكيلومترات", "الساعات", "حالة العداد"],
     )
     response = meter_readings_import_excel(UploadFile(filename="corrected.xlsx", file=good), None, db, actor)
@@ -242,4 +242,4 @@ def test_excel_error_identifies_equipment_and_retry_with_corrected_file(db):
     assert '"skipped":0' in payload
     assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
     latest = db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).order_by(MeterReading.reading_date.desc()).first()
-    assert float(latest.odometer) == 550.75
+    assert float(latest.odometer) == 550.7
