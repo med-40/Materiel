@@ -1,4 +1,6 @@
 from typing import Optional
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -12,6 +14,8 @@ from app.modules.equipment.schemas import EquipmentCreate, EquipmentOut, Equipme
 from app.modules.equipment_types import services as type_services
 from app.modules.users.models import User
 from app.modules.meter_readings import services as meter_services
+from app.modules.meter_readings.models import MeterReading
+from app.modules.meter_readings.audit import MeterReadingChange, utc_now
 
 router = APIRouter()
 templates = get_module_templates("app/modules/equipment/templates")
@@ -39,17 +43,11 @@ def equipment_detail_page(
     current_user: User = Depends(get_current_user),
 ):
     item = services.get_equipment(db, equipment_id)
-
     if not item:
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
-
     return templates.TemplateResponse(
         "equipment_detail.html",
-        {
-            "request": request,
-            "item": item,
-            "user": current_user,
-        },
+        {"request": request, "item": item, "user": current_user},
     )
 
 
@@ -112,10 +110,8 @@ def equipment_meters_page(
     item, readings, total_readings, total_pages, current_page = meter_services.history_rows(
         db, equipment_id, page=page, page_size=20
     )
-
     if not item:
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
-
     return templates.TemplateResponse(
         "equipment_meters.html",
         {
@@ -141,42 +137,116 @@ def equipment_meter_create(
     current_user: User = Depends(get_current_user),
 ):
     item = services.get_equipment(db, equipment_id)
-
     if not item:
         raise HTTPException(status_code=404, detail="العتاد غير موجود")
-
-    from datetime import datetime
-    from decimal import Decimal, InvalidOperation
-
     try:
         date_value = datetime.strptime(reading_date, "%Y-%m-%d")
         odometer_value = Decimal(odometer) if odometer.strip() else None
         hours_value = Decimal(hours) if hours.strip() else None
     except (ValueError, InvalidOperation):
         raise HTTPException(status_code=400, detail="تاريخ أو قيمة عداد غير صحيحة")
-
     if odometer_value is None and hours_value is None:
-        raise HTTPException(
-            status_code=400,
-            detail="يجب إدخال قراءة الكيلومترات أو قراءة الساعات",
-        )
-
+        raise HTTPException(status_code=400, detail="يجب إدخال قراءة الكيلومترات أو قراءة الساعات")
     try:
         meter_services.create_reading(
-            db,
-            equipment_id=equipment_id,
-            odometer=odometer_value,
-            hours=hours_value,
-            reading_date=date_value,
-            notes=notes,
+            db, equipment_id=equipment_id, odometer=odometer_value, hours=hours_value,
+            reading_date=date_value, notes=notes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    return RedirectResponse(url=f"/equipment/{equipment_id}/meters", status_code=status.HTTP_302_FOUND)
 
-    return RedirectResponse(
-        url=f"/equipment/{equipment_id}/meters",
-        status_code=status.HTTP_302_FOUND,
-    )
+
+@router.post("/equipment/{equipment_id}/meters/{reading_id}/update")
+def equipment_meter_update(
+    equipment_id: int,
+    reading_id: int,
+    reading_date: str = Form(...),
+    odometer: str = Form(""),
+    hours: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = services.get_equipment(db, equipment_id)
+    reading = db.query(MeterReading).filter(
+        MeterReading.id == reading_id,
+        MeterReading.equipment_id == equipment_id,
+    ).first()
+    if not item or not reading:
+        raise HTTPException(status_code=404, detail="القراءة غير موجودة")
+
+    try:
+        date_value = datetime.strptime(reading_date, "%Y-%m-%d")
+        unit = meter_services._unit(item)
+        raw_value = odometer if unit == "km" else hours
+        if not raw_value.strip():
+            raise ValueError("يجب إدخال قيمة العداد")
+        value = meter_services._parse_decimal(raw_value)
+    except (ValueError, InvalidOperation) as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "تاريخ أو قيمة عداد غير صحيحة")
+
+    if value < 0:
+        raise HTTPException(status_code=400, detail="قيمة العداد لا يمكن أن تكون سالبة")
+    if date_value.date() > datetime.now().date():
+        raise HTTPException(status_code=400, detail="لا يمكن إدخال قراءة بتاريخ مستقبلي")
+
+    for existing in meter_services.list_readings(db, equipment_id):
+        if existing.id == reading.id:
+            continue
+        existing_value = meter_services._value(existing, unit)
+        if existing_value is None:
+            continue
+        existing_value = Decimal(existing_value)
+        if existing.reading_date < date_value and existing_value > value:
+            raise HTTPException(status_code=400, detail="قيمة القراءة الجديدة أقل من قراءة لاحقة مسجلة")
+        if existing.reading_date > date_value and existing_value < value:
+            raise HTTPException(status_code=400, detail="قيمة القراءة الجديدة أكبر من قراءة لاحقة مسجلة")
+
+    reading.reading_date = date_value
+    reading.odometer = value if unit == "km" else None
+    reading.hours = value if unit == "hours" else None
+    reading.notes = (notes or "").strip()[:300] or None
+    meter_services._refresh_equipment_current(db, item, unit)
+    db.commit()
+    return RedirectResponse(url=f"/equipment/{equipment_id}/meters", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/equipment/{equipment_id}/meters/{reading_id}/delete")
+def equipment_meter_delete(
+    equipment_id: int,
+    reading_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = services.get_equipment(db, equipment_id)
+    reading = db.query(MeterReading).filter(
+        MeterReading.id == reading_id,
+        MeterReading.equipment_id == equipment_id,
+    ).first()
+    if not item or not reading:
+        raise HTTPException(status_code=404, detail="القراءة غير موجودة")
+
+    unit = meter_services._unit(item)
+    old_value = meter_services._value(reading, unit)
+    db.add(MeterReadingChange(
+        reading_id=reading.id,
+        equipment_id=equipment_id,
+        changed_at=utc_now(),
+        action="delete",
+        source=reading.source or "manual",
+        reading_date=reading.reading_date,
+        unit=unit,
+        old_value=old_value,
+        new_value=None,
+        actor_id=current_user.id,
+        details="حذف قراءة مسجلة.",
+    ))
+    db.delete(reading)
+    db.flush()
+    meter_services._refresh_equipment_current(db, item, unit)
+    db.commit()
+    return RedirectResponse(url=f"/equipment/{equipment_id}/meters", status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/api/equipment", response_model=list[EquipmentOut])
