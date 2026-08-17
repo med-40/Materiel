@@ -3,36 +3,59 @@ from io import BytesIO
 from zipfile import ZipFile
 from xml.etree import ElementTree as ET
 from openpyxl import load_workbook
+
 NS="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
 def tag(n): return f"{{{NS}}}{n}"
+
 def col_index(ref):
     n=0
     for ch in "".join(c for c in ref if c.isalpha()).upper(): n=n*26+ord(ch)-64
     return max(0,n-1)
+
 class RawSheet:
     def __init__(self,rows): self.rows=rows
     def iter_rows(self,values_only=True): return iter(self.rows)
+
 class RawWorkbook:
     def __init__(self,rows): self.active=RawSheet(rows)
+
+def _clean_header_text(value):
+    if value is None: return ""
+    # Excel may preserve RTL/LTR marks and zero-width characters in copied headers.
+    text = str(value).replace("\ufeff", "")
+    text = "".join(ch for ch in text if ch not in "\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+    return text.strip()
+
 def _normalize_import_headers(workbook):
-    """Accept the historical/exported header 'نوع العداد' as the equipment-type column."""
+    """Normalize historical/exported headers without changing the user's data."""
     try:
         sheet = workbook.active
         for row in sheet.iter_rows(min_row=1, max_row=20):
             for cell in row:
-                value = cell.value
-                if isinstance(value, str) and value.strip() == "نوع العداد":
+                value = _clean_header_text(cell.value)
+                if value == "نوع العداد":
                     cell.value = "نوع العتاد"
+                elif value == "حاله العداد":
+                    cell.value = "حالة العداد"
+                elif value:
+                    cell.value = value
     except Exception:
         pass
     return workbook
+
 def _normalize_raw_headers(rows):
     for row in rows[:20]:
         for idx, value in enumerate(row):
-            if isinstance(value, str) and value.strip() == "نوع العداد":
-                row[idx] = "نوع العتاد"
+            value = _clean_header_text(value)
+            if value == "نوع العداد":
+                value = "نوع العتاد"
+            elif value == "حاله العداد":
+                value = "حالة العداد"
+            row[idx] = value
     return rows
+
 def raw_xlsx(data):
     with ZipFile(BytesIO(data)) as z:
         names=set(z.namelist()); shared=[]
@@ -63,6 +86,7 @@ def raw_xlsx(data):
                 cells[idx]=value
             rows.append([cells.get(i) for i in range(mx+1)])
         return RawWorkbook(_normalize_raw_headers(rows))
+
 def load_meter_workbook(stream):
     data=stream.read()
     if hasattr(stream,"seek"): stream.seek(0)
