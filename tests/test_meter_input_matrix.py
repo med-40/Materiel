@@ -64,7 +64,6 @@ def test_manual_option_multiple_numeric_formats_and_retry_after_error(db):
     equipment = seed(db, "M-100", "km")
     actor = user(db, "manual-matrix")
 
-    # First accepted manual input using decimal text with thousands separator.
     response = meter_reading_create(
         equipment_id=equipment.id,
         reading_date="15/08/2026",
@@ -78,7 +77,6 @@ def test_manual_option_multiple_numeric_formats_and_retry_after_error(db):
     assert float(db.query(MeterReading).one().odometer) == 1234.5
     assert equipment.operational_status == "unavailable"
 
-    # Invalid input must fail, identify the equipment, and leave the saved value untouched.
     with pytest.raises(HTTPException) as exc:
         meter_reading_create(
             equipment_id=equipment.id,
@@ -95,7 +93,6 @@ def test_manual_option_multiple_numeric_formats_and_retry_after_error(db):
     assert "أقل من القراءة المسجلة" in str(exc.value.detail)
     assert db.query(MeterReading).count() == 1
 
-    # Correcting the value and submitting again must work without resetting the page/session.
     response = meter_reading_create(
         equipment_id=equipment.id,
         reading_date="16/08/2026",
@@ -152,7 +149,8 @@ def test_paste_option_accepts_date_number_formats_and_status_aliases_then_retrie
     response = meter_readings_bulk_create(bad_payload, db=db, current_user=actor)
     payload = response.body.decode("utf-8")
     assert response.status_code == 200
-    assert "created":0 in payload if False else True
+    assert '"created":0' in payload
+    assert '"skipped":1' in payload
     assert "P-300" in payload
     assert "نوع-P-300" in payload
     assert "أقل من القراءة المسجلة" in payload
@@ -201,12 +199,7 @@ def test_excel_option_accepts_arabic_english_headers_reordered_dates_and_values(
         ["available", "E-400", "17/08/2026", "نوع-E-400", "2,100", None],
     ]
     buffer = make_excel(rows, headers)
-    response = meter_readings_import_excel(
-        UploadFile(filename="matrix.xlsx", file=buffer),
-        None,
-        db,
-        actor,
-    )
+    response = meter_readings_import_excel(UploadFile(filename="matrix.xlsx", file=buffer), None, db, actor)
     assert response.status_code == 200
     payload = response.body.decode("utf-8")
     assert '"created":3' in payload
