@@ -5,7 +5,7 @@ from sqlalchemy.orm import relationship
 
 from app.database.base import Base
 from app.modules.equipment.models import Equipment
-from app.modules.meter_readings.audit import MeterReadingChange
+from app.modules.meter_readings.audit import MeterReadingChange, utc_now
 
 
 class MeterReading(Base):
@@ -13,9 +13,9 @@ class MeterReading(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     equipment_id = Column(Integer, ForeignKey("equipment.id", ondelete="CASCADE"), nullable=False, index=True)
-    reading_date = Column(DateTime, nullable=False, default=datetime.utcnow)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.current_timestamp())
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.current_timestamp(), onupdate=datetime.utcnow)
+    reading_date = Column(DateTime, nullable=False, default=utc_now)
+    created_at = Column(DateTime, nullable=False, default=utc_now, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, nullable=False, default=utc_now, server_default=func.current_timestamp(), onupdate=utc_now)
     odometer = Column(Numeric(10, 1), nullable=True)
     hours = Column(Numeric(10, 1), nullable=True)
     source = Column(String(50), nullable=False, default="manual")
@@ -45,7 +45,7 @@ def _audit_meter_insert(mapper, connection, target):
     connection.execute(insert(MeterReadingChange.__table__).values(
         reading_id=target.id,
         equipment_id=target.equipment_id,
-        changed_at=datetime.utcnow(),
+        changed_at=utc_now(),
         action="add",
         source=target.source or "manual",
         reading_date=target.reading_date,
@@ -70,7 +70,7 @@ def _audit_meter_update(mapper, connection, target):
     connection.execute(insert(MeterReadingChange.__table__).values(
         reading_id=target.id,
         equipment_id=target.equipment_id,
-        changed_at=datetime.utcnow(),
+        changed_at=utc_now(),
         action="update",
         source=target.source or "manual",
         reading_date=target.reading_date,
