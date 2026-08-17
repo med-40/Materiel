@@ -185,7 +185,7 @@ def _validate_updated_reading(db: Session, equipment_id: int, reading_id: int, r
         if other.reading_date > reading_date and other_value < value:
             raise ValueError(f"القيمة ({value:g}) أكبر من القراءة اللاحقة بتاريخ {other.reading_date:%d/%m/%Y} ({other_value:g})")
 @router.post("/history/{equipment_id}/update")
-def meter_reading_update(equipment_id: int = Form(...), reading_id: int = Form(...), reading_date: str = Form(...), value: str = Form(...), notes: str = Form(""), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def meter_reading_update(equipment_id: int, reading_id: int = Form(...), reading_date: str = Form(...), value: str = Form(...), notes: str = Form(""), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     equipment, reading = _reading_context(db, equipment_id, reading_id); context = _equipment_label(equipment); unit = services._unit(equipment)
     try:
         date_value = _parse_date(reading_date); meter_value = _parse_decimal(value); _validate_updated_reading(db, equipment_id, reading_id, date_value, meter_value, unit)
@@ -198,7 +198,7 @@ def meter_reading_update(equipment_id: int = Form(...), reading_id: int = Form(.
     except SQLAlchemyError:
         db.rollback(); return JSONResponse(status_code=500, content={"ok": False, "error": f"{context}. تعذر تعديل القراءة بسبب خطأ في قاعدة البيانات."})
 @router.post("/history/{equipment_id}/delete")
-def meter_reading_delete(equipment_id: int = Form(...), reading_id: int = Form(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def meter_reading_delete(equipment_id: int, reading_id: int = Form(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     equipment, reading = _reading_context(db, equipment_id, reading_id); context = _equipment_label(equipment)
     try:
         db.delete(reading); db.flush(); services._refresh_equipment_current(db, equipment, services._unit(equipment)); db.commit()
