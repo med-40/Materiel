@@ -128,11 +128,24 @@ def create_reading(db: Session, equipment_id: int, odometer=None, hours=None, re
     db.add(reading); db.flush(); _refresh_equipment_current(db, equipment, unit_code); db.commit(); db.refresh(reading); return reading
 
 def create_bulk_readings(db: Session, rows: Iterable[dict]):
-    """Validate/import bulk rows. New imports use the equipment model; legacy callers may still send equipment_type."""
+    """Validate/import bulk rows. New imports use the equipment model; legacy callers may still send equipment_type.
+
+    The list page displays ``registration_number`` and falls back to ``asset_code`` when the
+    former is empty. Bulk input must use the same identifier, otherwise a visible equipment
+    can incorrectly be reported as "not found". Prefer a real registration number when both
+    fields normalize to the same value.
+    """
     clean_rows = list(rows)
     if not clean_rows: return 0, 0, [], [], []
-    equipment_list = db.query(Equipment).options(joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model)).filter(Equipment.registration_number.isnot(None)).all()
-    equipment_map = {normalize_registration(item.registration_number): item for item in equipment_list if normalize_registration(item.registration_number)}
+    equipment_list = db.query(Equipment).options(joinedload(Equipment.equipment_type), joinedload(Equipment.equipment_model)).all()
+    equipment_map: dict[str, Equipment] = {}
+    for item in equipment_list:
+        registration_key = normalize_registration(item.registration_number)
+        asset_key = normalize_registration(item.asset_code)
+        if registration_key:
+            equipment_map[registration_key] = item
+        if asset_key and asset_key not in equipment_map:
+            equipment_map[asset_key] = item
     errors: list[str] = []; warnings: list[str] = []; candidates: list[dict] = []
     for index, row in enumerate(clean_rows, start=1):
         row_number = row.get("_row_number", index); registration_raw = row.get("registration"); registration = normalize_registration(registration_raw)
