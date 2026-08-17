@@ -84,6 +84,29 @@ def test_manual_reading_and_monotonic_validation(db):
     assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
 
 
+def test_duplicate_manual_reading_same_date_and_value_is_rejected(db):
+    equipment = seed_equipment(db, "DUP-1", "km")
+    reading_date = datetime(2026, 8, 17)
+    services.create_reading(db, equipment.id, odometer=500, reading_date=reading_date)
+    with pytest.raises(ValueError, match="مكررة|مكرر"):
+        services.create_reading(db, equipment.id, odometer=500, reading_date=reading_date)
+    assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 1
+
+
+def test_duplicate_bulk_reading_same_date_and_value_is_rejected(db):
+    equipment = seed_equipment(db, "DUP-2", "km")
+    reading_date = datetime(2026, 8, 17)
+    services.create_reading(db, equipment.id, odometer=700, reading_date=reading_date)
+    created, rejected, errors, warnings, reading_ids = services.create_bulk_readings(
+        db, [bulk_row(equipment, reading_date, 700, row_number=2)]
+    )
+    assert created == 0
+    assert rejected == 1
+    assert not reading_ids
+    assert any("مكررة" in error for error in errors)
+    assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 1
+
+
 def test_meter_change_history_records_old_and_new_values(db):
     equipment = seed_equipment(db, "356", "km")
     reading = services.create_reading(db, equipment.id, odometer=100, reading_date=datetime(2026, 8, 10))

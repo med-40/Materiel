@@ -114,6 +114,19 @@ def history_rows(db: Session, equipment_id: int, page: int = 1, page_size: int =
         current_value = row.odometer if unit_code == "km" else row.hours; previous_value = row.previous_odometer if unit_code == "km" else row.previous_hours; difference = Decimal(current_value) - Decimal(previous_value) if current_value is not None and previous_value is not None else None
         rows.append({"number": number, "id": row.id, "date": row.reading_date.strftime("%d/%m/%Y"), "odometer": _fmt(row.odometer), "hours": _fmt(row.hours), "reading": _fmt(current_value), "difference": _fmt_difference(difference), "note": row.notes or "—", "status": equipment_status, "status_class": status_class, "unit": "كم" if unit_code == "km" else "ساعة عمل"})
     return equipment, rows, total, pages, page
+def _ensure_not_duplicate_reading(db: Session, equipment_id: int, reading_date: datetime, value: Decimal, unit: str, exclude_id: int | None = None):
+    for existing in list_readings(db, equipment_id):
+        if exclude_id is not None and existing.id == exclude_id:
+            continue
+        existing_value = _value(existing, unit)
+        if existing_value is None:
+            continue
+        if existing.reading_date.date() == reading_date.date() and Decimal(existing_value) == value:
+            raise ValueError(
+                f"لا يمكن إضافة نفس قراءة العداد مرتين للعتاد في تاريخ {reading_date:%d/%m/%Y}: "
+                f"القيمة ({value:g}) موجودة مسبقًا. لم يتم حفظ قراءة مكررة."
+            )
+
 def create_reading(db: Session, equipment_id: int, odometer=None, hours=None, reading_date: datetime | None = None, notes: str | None = None, equipment_status: str = "available") -> MeterReading:
     equipment = get_equipment_with_readings(db, equipment_id)
     if not equipment: raise ValueError("العتاد غير موجود")
@@ -123,6 +136,7 @@ def create_reading(db: Session, equipment_id: int, odometer=None, hours=None, re
     if value < 0: raise ValueError("قيمة العداد لا يمكن أن تكون سالبة")
     date_value = reading_date or datetime.now(timezone.utc)
     if date_value.date() > datetime.now(timezone.utc).date(): raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي. اختر تاريخ اليوم أو تاريخًا سابقًا.")
+    _ensure_not_duplicate_reading(db, equipment_id, date_value, value, unit_code)
     _validate_reading_position(db, equipment_id, date_value, value, unit_code); equipment.operational_status = normalize_equipment_status(equipment_status)
     reading = MeterReading(equipment_id=equipment_id, reading_date=date_value, odometer=value if unit_code == "km" else None, hours=value if unit_code == "hours" else None, source="manual", notes=(notes or "").strip()[:300] or None)
     db.add(reading); db.flush(); _refresh_equipment_current(db, equipment, unit_code); db.commit(); db.refresh(reading); return reading
@@ -191,8 +205,18 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         equipment = items[0]["equipment"]; unit_code = _unit(equipment); existing = list_readings(db, equipment_id); accepted_for_equipment: list[dict] = []
         for item in sorted(items, key=lambda x: (x["reading_date"], x["_row_number"])):
             value = item["value"]; invalid_reason = None
-            if not item["blank_value"]:
-                comparisons = existing + [MeterReading(equipment_id=equipment_id, reading_date=x["reading_date"], odometer=x["value"] if unit_code == "km" else None, hours=x["value"] if unit_code == "hours" else None) for x in accepted_for_equipment]
+            comparisons = existing + [MeterReading(equipment_id=equipment_id, reading_date=x["reading_date"], odometer=x["value"] if unit_code == "km" else None, hours=x["value"] if unit_code == "hours" else None) for x in accepted_for_equipment]
+            for other in comparisons:
+                other_value = _value(other, unit_code)
+                if other_value is None:
+                    continue
+                if other.reading_date.date() == item["reading_date"].date() and Decimal(other_value) == value:
+                    invalid_reason = (
+                        f"الصف {item['_row_number']}: القراءة ({value:g}) مكررة للعتاد بتاريخ "
+                        f"{item['reading_date']:%d/%m/%Y}، ولم يتم حفظ القراءة المكررة."
+                    )
+                    break
+            if invalid_reason is None and not item["blank_value"]:
                 for other in comparisons:
                     other_value = _value(other, unit_code)
                     if other_value is None: continue
