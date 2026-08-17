@@ -3,7 +3,7 @@ from datetime import datetime
 from app.modules.meter_readings import services
 from app.modules.meter_readings.legacy_cleanup import cleanup_legacy_readings
 from app.modules.meter_readings.models import MeterReading
-from test_meter_readings import db, seed_equipment
+from tests.test_meter_readings import db, seed_equipment
 
 
 def test_legacy_lower_latest_reading_is_removed_and_main_uses_valid_latest(db):
