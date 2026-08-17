@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Optional, Iterable
 
@@ -118,7 +118,7 @@ def _refresh_equipment_current(db: Session, equipment: Equipment, unit: str):
 
 def cleanup_invalid_readings(db: Session):
     """Remove legacy readings that violate the hard date/value rules."""
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     cutoff = datetime.combine(today, datetime.max.time())
     invalid = db.query(MeterReading).filter(MeterReading.reading_date > cutoff).all()
     invalid += db.query(MeterReading).filter((MeterReading.odometer < 0) | (MeterReading.hours < 0)).all()
@@ -216,8 +216,8 @@ def create_reading(db: Session, equipment_id: int, odometer=None, hours=None, re
     value = _parse_decimal(value)
     if value < 0:
         raise ValueError("قيمة العداد لا يمكن أن تكون سالبة")
-    date_value = reading_date or datetime.utcnow()
-    if date_value.date() > datetime.utcnow().date():
+    date_value = reading_date or datetime.now(timezone.utc)
+    if date_value.date() > datetime.now(timezone.utc).date():
         raise ValueError("لا يمكن إدخال قراءة بتاريخ مستقبلي. اختر تاريخ اليوم أو تاريخًا سابقًا.")
     _validate_reading_position(db, equipment_id, date_value, value, unit_code)
     equipment.operational_status = normalize_equipment_status(equipment_status)
@@ -264,7 +264,7 @@ def create_bulk_readings(db: Session, rows: Iterable[dict]):
         if not isinstance(reading_date, datetime):
             errors.append(f"الصف {row_number}: تاريخ القراءة غير صحيح.")
             continue
-        if reading_date.date() > datetime.utcnow().date():
+        if reading_date.date() > datetime.now(timezone.utc).date():
             errors.append(f"الصف {row_number}: تاريخ القراءة {reading_date:%d/%m/%Y} مستقبلي، ولم يتم حفظ القراءة.")
             continue
         unit_code = _unit(equipment)

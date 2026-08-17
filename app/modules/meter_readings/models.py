@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String, event, func, select, insert
 from sqlalchemy.orm import relationship
@@ -26,7 +26,7 @@ class MeterReading(Base):
 
 @event.listens_for(MeterReading, "before_insert")
 def _validate_meter_reading(mapper, connection, target):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if target.created_at is None:
         target.created_at = now
     if target.updated_at is None:

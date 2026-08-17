@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from io import BytesIO
 
 import pytest
@@ -80,7 +80,7 @@ def test_manual_reading_and_monotonic_validation(db):
         services.create_reading(db, equipment.id, odometer=130, reading_date=base - timedelta(days=1))
     assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
     with pytest.raises(ValueError, match="تاريخ مستقبلي"):
-        services.create_reading(db, equipment.id, odometer=125, reading_date=datetime.utcnow() + timedelta(days=1))
+        services.create_reading(db, equipment.id, odometer=125, reading_date=datetime.now(timezone.utc) + timedelta(days=1))
     assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 2
 
 
