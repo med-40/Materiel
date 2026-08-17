@@ -1,25 +1,5 @@
 {% extends "base.html" %}
-{% block title %}تفاصيل العتاد
-<div style="margin-top:20px; display:flex; gap:10px; align-items:center;">
-    <a href="/equipment" class="btn-secondary">العودة إلى قائمة العتاد</a>
-
-    <form method="post"
-          action="/equipment/{{ item.id }}/delete"
-          onsubmit="return confirm('هل أنت متأكد من حذف هذا العتاد؟ لا يمكن التراجع عن هذا الإجراء.');">
-        <button type="submit"
-                class="btn-danger">
-            حذف العتاد
-        </button>
-    </form>
-</div>
-
-<div class="card" style="margin-top:20px;">
-    <h3>قراءات عداد الكيلومترات</h3>
-
-    
-</div>
-
-{% endblock %}
+{% block title %}تفاصيل العتاد{% endblock %}
 
 {% block content %}
 
@@ -30,11 +10,9 @@
 </div>
 
 <div class="card">
-
     <h3>{{ item.asset_code }}</h3>
 
     <div class="grid-form">
-
         <div class="field">
             <label>الرقم</label>
             <div>{{ item.asset_code }}</div>
@@ -66,6 +44,11 @@
         </div>
 
         <div class="field">
+            <label>تاريخ الاقتناء</label>
+            <div>{{ item.acquisition_date.strftime('%d/%m/%Y') if item.acquisition_date else "-" }}</div>
+        </div>
+
+        <div class="field">
             <label>عداد الكم</label>
             <div>{{ item.current_odometer or 0 }} كم</div>
         </div>
@@ -89,33 +72,34 @@
         <div class="field">
             <label>الوضعية</label>
             <div>
-                {% if item.operational_status == "available" %}
-                    متاح
-                {% elif item.operational_status == "in_mission" %}
-                    في مهمة
-                {% elif item.operational_status == "in_maintenance" %}
-                    في الصيانة
-                {% elif item.operational_status == "in_external_workshop" %}
-                    في ورشة خارجية
-                {% else %}
-                    غير متاح
-                {% endif %}
+                {% if item.operational_status == "available" %}متاح
+                {% elif item.operational_status == "in_mission" %}في مهمة
+                {% elif item.operational_status == "in_maintenance" %}في الصيانة
+                {% elif item.operational_status == "in_external_workshop" %}في ورشة خارجية
+                {% else %}غير متاح{% endif %}
             </div>
         </div>
 
+        {% if item.notes %}
+        <div class="field">
+            <label>ملاحظات</label>
+            <div>{{ item.notes }}</div>
+        </div>
+        {% endif %}
     </div>
-
 </div>
 
-
-<div style="margin-top:20px; display:flex; gap:10px; align-items:center;">
+<div style="margin-top:20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
     <a href="/equipment" class="btn-secondary">العودة إلى قائمة العتاد</a>
+
+    <a href="/equipment/{{ item.id }}/edit" class="btn-primary">
+        تعديل العتاد
+    </a>
 
     <form method="post"
           action="/equipment/{{ item.id }}/delete"
           onsubmit="return confirm('هل أنت متأكد من حذف هذا العتاد؟ لا يمكن التراجع عن هذا الإجراء.');">
-        <button type="submit"
-                class="btn-danger">
+        <button type="submit" class="btn-danger">
             حذف العتاد
         </button>
     </form>
@@ -123,7 +107,7 @@
 
 <div class="card" style="margin-top:20px;">
     <h3>قراءات عداد الكيلومترات</h3>
-
+    <a href="/equipment/{{ item.id }}/meters" class="btn-outline">عرض سجل القراءات</a>
 </div>
 
 {% endblock %}

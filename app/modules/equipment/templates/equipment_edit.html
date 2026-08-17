@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}تعديل العتاد{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>تعديل العتاد</h2>
+    <a href="/equipment/{{ item.id }}" class="btn-outline">العودة إلى تفاصيل العتاد</a>
+</div>
+
+<div class="card">
+    <h3>{{ item.asset_code }}</h3>
+
+    <form method="post" action="/equipment/{{ item.id }}/edit" class="grid-form">
+        <div class="field">
+            <label>الوثيقة</label>
+            <input type="text" name="acquisition_document" value="{{ item.acquisition_document or '' }}">
+        </div>
+
+        <div class="field">
+            <label>نوع العتاد *</label>
+            <select name="equipment_type_id" id="edit-type-select" required onchange="onEditTypeChange()">
+                {% for t in types %}
+                <option value="{{ t.id }}" {% if t.id == item.equipment_type_id %}selected{% endif %}>
+                    {{ t.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="field">
+            <label>الطراز</label>
+            <select name="equipment_model_id" id="edit-model-select">
+                <option value="">بدون طراز محدد</option>
+                {% if item.equipment_model %}
+                <option value="{{ item.equipment_model.id }}" selected>{{ item.equipment_model.name }}</option>
+                {% endif %}
+            </select>
+        </div>
+
+        <div class="field">
+            <label>رقم التسجيل</label>
+            <input type="text" name="registration_number" value="{{ item.registration_number or '' }}">
+        </div>
+
+        <div class="field">
+            <label>رقم الهيكل</label>
+            <input type="text" name="vin" value="{{ item.vin or '' }}">
+        </div>
+
+        <div class="field">
+            <label>تاريخ الاقتناء</label>
+            <input type="date" name="acquisition_date"
+                   value="{{ item.acquisition_date.strftime('%Y-%m-%d') if item.acquisition_date else '' }}">
+        </div>
+
+        <div class="field">
+            <label>الحالة الفنية</label>
+            <select name="technical_condition">
+                <option value="ready" {% if item.technical_condition == 'ready' %}selected{% endif %}>جاهز</option>
+                <option value="broken" {% if item.technical_condition == 'broken' %}selected{% endif %}>عاطل</option>
+            </select>
+        </div>
+
+        <div class="field">
+            <label>الوضعية</label>
+            <select name="operational_status">
+                <option value="available" {% if item.operational_status == 'available' %}selected{% endif %}>متاح</option>
+                <option value="in_mission" {% if item.operational_status == 'in_mission' %}selected{% endif %}>في مهمة</option>
+                <option value="in_maintenance" {% if item.operational_status == 'in_maintenance' %}selected{% endif %}>في الصيانة</option>
+                <option value="in_external_workshop" {% if item.operational_status == 'in_external_workshop' %}selected{% endif %}>في ورشة خارجية</option>
+                <option value="unavailable" {% if item.operational_status == 'unavailable' %}selected{% endif %}>غير متاح</option>
+            </select>
+        </div>
+
+        <div class="field" style="grid-column:1 / -1;">
+            <label>ملاحظات</label>
+            <textarea name="notes" rows="4" maxlength="500">{{ item.notes or '' }}</textarea>
+        </div>
+
+        <div class="field field-submit" style="grid-column:1 / -1; display:flex; gap:10px; align-items:center;">
+            <button type="submit" class="btn-primary">حفظ التعديلات</button>
+            <a href="/equipment/{{ item.id }}" class="btn-secondary">إلغاء</a>
+        </div>
+    </form>
+</div>
+
+<script>
+async function onEditTypeChange() {
+    const typeSelect = document.getElementById('edit-type-select');
+    const modelSelect = document.getElementById('edit-model-select');
+    if (!typeSelect || !modelSelect) return;
+
+    const typeId = typeSelect.value;
+    modelSelect.disabled = true;
+    modelSelect.innerHTML = '<option value="">جاري تحميل الطرازات...</option>';
+
+    if (!typeId) {
+        modelSelect.innerHTML = '<option value="">بدون طراز محدد</option>';
+        modelSelect.disabled = false;
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            '/api/equipment-types/' + encodeURIComponent(typeId) + '/models',
+            {
+                method: 'GET',
+                headers: {'Accept': 'application/json'},
+                credentials: 'same-origin'
+            }
+        );
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+
+        const models = await response.json();
+        const currentModelId = '{{ item.equipment_model_id or "" }}';
+        modelSelect.innerHTML = '<option value="">بدون طراز محدد</option>';
+
+        if (Array.isArray(models)) {
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                option.textContent = model.name;
+                if (String(model.id) === String(currentModelId)) option.selected = true;
+                modelSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('خطأ في تحميل الطرازات:', error);
+        modelSelect.innerHTML = '<option value="">تعذر تحميل الطرازات</option>';
+    } finally {
+        modelSelect.disabled = false;
+    }
+}
+</script>
+{% endblock %}

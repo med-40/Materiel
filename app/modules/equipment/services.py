@@ -1,8 +1,11 @@
 from typing import Optional
+
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.equipment.models import Equipment
 from app.modules.equipment.schemas import EquipmentCreate, EquipmentUpdate
+from app.modules.equipment_types.models import EquipmentModel, EquipmentType
 
 
 def list_equipment(
@@ -61,10 +64,57 @@ def create_equipment(
 def update_equipment(
     db: Session, equipment: Equipment, data: EquipmentUpdate, user_id: Optional[int] = None
 ) -> Equipment:
-    for field, value in data.model_dump(exclude_unset=True).items():
+    values = data.model_dump(exclude_unset=True)
+
+    if "registration_number" in values:
+        values["registration_number"] = (values["registration_number"] or "").strip() or None
+        if values["registration_number"] is not None:
+            duplicate = (
+                db.query(Equipment)
+                .filter(
+                    Equipment.registration_number == values["registration_number"],
+                    Equipment.id != equipment.id,
+                )
+                .first()
+            )
+            if duplicate:
+                raise ValueError("رقم التسجيل مستخدم بالفعل لعتاد آخر")
+
+    if "vin" in values:
+        values["vin"] = (values["vin"] or "").strip() or None
+        if values["vin"] is not None:
+            duplicate = (
+                db.query(Equipment)
+                .filter(Equipment.vin == values["vin"], Equipment.id != equipment.id)
+                .first()
+            )
+            if duplicate:
+                raise ValueError("رقم الهيكل مستخدم بالفعل لعتاد آخر")
+
+    type_id = values.get("equipment_type_id", equipment.equipment_type_id)
+    model_id = values.get("equipment_model_id", equipment.equipment_model_id)
+
+    if db.query(EquipmentType.id).filter(EquipmentType.id == type_id).first() is None:
+        raise ValueError("نوع العتاد المحدد غير موجود")
+
+    if model_id is not None:
+        model = db.query(EquipmentModel).filter(EquipmentModel.id == model_id).first()
+        if model is None:
+            raise ValueError("طراز العتاد المحدد غير موجود")
+        if model.equipment_type_id != type_id:
+            raise ValueError("الطراز المحدد لا ينتمي إلى نوع العتاد المختار")
+
+    if "notes" in values:
+        values["notes"] = (values["notes"] or "").strip()[:500] or None
+
+    for field, value in values.items():
         setattr(equipment, field, value)
     equipment.updated_by_id = user_id
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("تعذر حفظ التعديل: توجد قيمة فريدة مستخدمة مسبقًا") from exc
     db.refresh(equipment)
     return equipment
 

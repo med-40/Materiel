@@ -1,6 +1,7 @@
 from typing import Optional
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -51,6 +52,23 @@ def equipment_detail_page(
     )
 
 
+@router.get("/equipment/{equipment_id}/edit", response_class=HTMLResponse)
+def equipment_edit_page(
+    equipment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = services.get_equipment(db, equipment_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="العتاد غير موجود")
+    types = type_services.list_types(db)
+    return templates.TemplateResponse(
+        "equipment_edit.html",
+        {"request": request, "item": item, "types": types, "user": current_user},
+    )
+
+
 @router.post("/equipment/create")
 def equipment_create_form(
     request: Request,
@@ -85,6 +103,50 @@ def equipment_create_form(
     except ValueError:
         pass
     return RedirectResponse(url="/equipment", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/equipment/{equipment_id}/edit")
+def equipment_edit_form(
+    equipment_id: int,
+    equipment_type_id: int = Form(...),
+    equipment_model_id: Optional[str] = Form(None),
+    acquisition_document: str = Form(""),
+    registration_number: str = Form(""),
+    vin: str = Form(""),
+    acquisition_date: str = Form(""),
+    technical_condition: str = Form("ready"),
+    operational_status: str = Form("available"),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = services.get_equipment(db, equipment_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="العتاد غير موجود")
+
+    try:
+        date_value = datetime.strptime(acquisition_date, "%Y-%m-%d").date() if acquisition_date.strip() else None
+        model_id = int(equipment_model_id) if equipment_model_id else None
+        services.update_equipment(
+            db,
+            item,
+            EquipmentUpdate(
+                equipment_type_id=equipment_type_id,
+                equipment_model_id=model_id,
+                acquisition_document=acquisition_document or None,
+                registration_number=registration_number or None,
+                vin=vin or None,
+                acquisition_date=date_value,
+                technical_condition=technical_condition,
+                operational_status=operational_status,
+                notes=notes or None,
+            ),
+            user_id=current_user.id,
+        )
+    except (ValueError, InvalidOperation) as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "بيانات التعديل غير صحيحة")
+
+    return RedirectResponse(url=f"/equipment/{equipment_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/equipment/{equipment_id}/delete")
