@@ -51,10 +51,11 @@ def test_duplicate_value_same_date_is_rejected_on_update():
         first = services.create_reading(db, equipment.id, odometer=999, reading_date=datetime(2026, 8, 13))
         second = services.create_reading(db, equipment.id, odometer=1000, reading_date=datetime(2026, 8, 14))
 
+        second.reading_date = datetime(2026, 8, 13)
         second.odometer = 999
         try:
             db.flush()
-            raise AssertionError("duplicate update was accepted")
+            raise AssertionError("duplicate value on the same date was accepted")
         except ValueError as exc:
             assert "999" in str(exc)
             assert "13/08/2026" in str(exc)
@@ -63,6 +64,27 @@ def test_duplicate_value_same_date_is_rejected_on_update():
 
         assert db.query(MeterReading).count() == 2
         assert db.get(MeterReading, first.id).odometer == 999
+    finally:
+        db.close()
+
+
+def test_same_value_on_different_date_is_allowed_on_update():
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    db = Session()
+    try:
+        equipment = seed(db)
+        services.create_reading(db, equipment.id, odometer=999, reading_date=datetime(2026, 8, 13))
+        second = services.create_reading(db, equipment.id, odometer=1000, reading_date=datetime(2026, 8, 14))
+
+        second.odometer = 999
+        db.flush()
+        db.commit()
+
+        updated = db.get(MeterReading, second.id)
+        assert updated is not None
+        assert updated.odometer == 999
+        assert updated.reading_date.date() == date(2026, 8, 14)
     finally:
         db.close()
 
