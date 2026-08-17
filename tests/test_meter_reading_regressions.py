@@ -12,6 +12,7 @@ from app.modules.equipment_types.models import EquipmentModel, EquipmentType
 from app.modules.meter_readings.models import MeterReading
 from app.modules.meter_readings.excel_reader import load_meter_workbook
 from app.modules.meter_readings import services
+from app.modules.users.models import User  # noqa: F401 - register users table for AuditMixin FKs
 
 
 engine = create_engine(
