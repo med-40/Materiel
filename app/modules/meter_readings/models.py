@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, String, event, func, select, insert
 from sqlalchemy.orm import relationship
+from sqlalchemy import inspect
 
 from app.database.base import Base
 from app.modules.equipment.models import Equipment
@@ -36,6 +37,32 @@ def _validate_meter_reading(mapper, connection, target):
     status = connection.execute(select(Equipment.operational_status).where(Equipment.id == target.equipment_id)).scalar_one_or_none()
     if status:
         target.equipment_status = status
+
+
+@event.listens_for(MeterReading, "before_update")
+def _prevent_duplicate_meter_update(mapper, connection, target):
+    """Protect the invariant that one equipment cannot have the same value twice on one date."""
+    state = inspect(target)
+    if not any(state.attrs[name].history.has_changes() for name in ("reading_date", "odometer", "hours")):
+        return
+    if target.reading_date is None or target.equipment_id is None:
+        return
+    unit_column = MeterReading.odometer if target.odometer is not None else MeterReading.hours
+    value = target.odometer if target.odometer is not None else target.hours
+    if value is None:
+        return
+    rows = connection.execute(
+        select(MeterReading.id, MeterReading.reading_date, unit_column)
+        .where(MeterReading.equipment_id == target.equipment_id, MeterReading.id != target.id)
+    ).all()
+    for row in rows:
+        existing_date = row[1]
+        existing_value = row[2]
+        if existing_date is not None and existing_date.date() == target.reading_date.date() and existing_value is not None and existing_value == value:
+            raise ValueError(
+                f"لا يمكن تعديل القراءة: القيمة ({value:g}) موجودة مسبقًا للعتاد في تاريخ "
+                f"{target.reading_date:%d/%m/%Y}. لم يتم حفظ قراءة مكررة."
+            )
 
 
 @event.listens_for(MeterReading, "after_insert")
