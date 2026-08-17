@@ -1,1 +1,0 @@
-# Temporary diagnostic placeholder; this file is intentionally empty and will be deleted.
