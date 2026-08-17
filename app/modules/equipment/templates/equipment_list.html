@@ -36,6 +36,11 @@
             <label>الطراز</label>
             <select name="equipment_model_id" id="model-select">
                 <option value="">اختر النوع أولاً</option>
+                {% for t in types %}
+                    {% for m in t.models %}
+                    <option value="{{ m.id }}" data-type-id="{{ t.id }}" hidden>{{ m.name }}</option>
+                    {% endfor %}
+                {% endfor %}
             </select>
         </div>
 
@@ -160,10 +165,26 @@ function openEquipment(id) {
     window.location.href = '/equipment/' + id;
 }
 
-
 function toggleAddForm() {
     const card = document.getElementById('add-form-card');
     card.style.display = card.style.display === 'none' ? 'block' : 'none';
+}
+
+function showServerModels(typeId) {
+    const modelSelect = document.getElementById('model-select');
+    if (!modelSelect) return;
+
+    const modelOptions = modelSelect.querySelectorAll('option[data-type-id]');
+    modelOptions.forEach(option => {
+        option.hidden = option.dataset.typeId !== String(typeId);
+        option.style.display = option.hidden ? 'none' : '';
+    });
+
+    const hasModels = Array.from(modelOptions).some(option => option.dataset.typeId === String(typeId));
+    modelOptions.forEach(option => { if (!option.hidden) option.disabled = false; });
+
+    modelSelect.value = '';
+    return hasModels;
 }
 
 async function onTypeChange() {
@@ -174,35 +195,38 @@ async function onTypeChange() {
 
     const typeId = typeSelect.value;
 
-    modelSelect.innerHTML = '<option value="">جاري تحميل الطرازات...</option>';
-    modelSelect.disabled = true;
-
     if (!typeId) {
         modelSelect.innerHTML = '<option value="">اختر النوع أولاً</option>';
         return;
     }
+
+    // The models are already loaded with the selected equipment types on the server.
+    // Show them immediately so the form does not depend on a second API request.
+    const serverHasModels = showServerModels(typeId);
+    modelSelect.disabled = false;
+
+    if (serverHasModels) {
+        return;
+    }
+
+    // Keep the API as a fallback for data created while this page was open.
+    modelSelect.innerHTML = '<option value="">جاري تحميل الطرازات...</option>';
+    modelSelect.disabled = true;
 
     try {
         const response = await fetch(
             '/api/equipment-types/' + encodeURIComponent(typeId) + '/models',
             {
                 method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                },
+                headers: {'Accept': 'application/json'},
                 credentials: 'same-origin'
             }
         );
 
-        if (!response.ok) {
-            throw new Error('HTTP ' + response.status);
-        }
-
+        if (!response.ok) throw new Error('HTTP ' + response.status);
         const models = await response.json();
 
-        modelSelect.innerHTML =
-            '<option value="">بدون طراز محدد</option>';
-
+        modelSelect.innerHTML = '<option value="">بدون طراز محدد</option>';
         if (Array.isArray(models)) {
             models.forEach(model => {
                 const option = document.createElement('option');
@@ -211,19 +235,13 @@ async function onTypeChange() {
                 modelSelect.appendChild(option);
             });
         }
-
-        modelSelect.disabled = false;
-
     } catch (error) {
         console.error('خطأ في تحميل الطرازات:', error);
-
-        modelSelect.innerHTML =
-            '<option value="">تعذر تحميل الطرازات</option>';
-
+        modelSelect.innerHTML = '<option value="">لا توجد طرازات لهذا النوع</option>';
+    } finally {
         modelSelect.disabled = false;
     }
 }
-
 
 function applyFilters() {
     const search = document.getElementById('search-input').value.trim().toLowerCase();
