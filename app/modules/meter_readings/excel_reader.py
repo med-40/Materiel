@@ -15,6 +15,24 @@ class RawSheet:
     def iter_rows(self,values_only=True): return iter(self.rows)
 class RawWorkbook:
     def __init__(self,rows): self.active=RawSheet(rows)
+def _normalize_import_headers(workbook):
+    """Accept the historical/exported header 'نوع العداد' as the equipment-type column."""
+    try:
+        sheet = workbook.active
+        for row in sheet.iter_rows(min_row=1, max_row=20):
+            for cell in row:
+                value = cell.value
+                if isinstance(value, str) and value.strip() == "نوع العداد":
+                    cell.value = "نوع العتاد"
+    except Exception:
+        pass
+    return workbook
+def _normalize_raw_headers(rows):
+    for row in rows[:20]:
+        for idx, value in enumerate(row):
+            if isinstance(value, str) and value.strip() == "نوع العداد":
+                row[idx] = "نوع العتاد"
+    return rows
 def raw_xlsx(data):
     with ZipFile(BytesIO(data)) as z:
         names=set(z.namelist()); shared=[]
@@ -44,11 +62,11 @@ def raw_xlsx(data):
                     except (TypeError,ValueError): value=raw
                 cells[idx]=value
             rows.append([cells.get(i) for i in range(mx+1)])
-        return RawWorkbook(rows)
+        return RawWorkbook(_normalize_raw_headers(rows))
 def load_meter_workbook(stream):
     data=stream.read()
     if hasattr(stream,"seek"): stream.seek(0)
-    try: return load_workbook(BytesIO(data),read_only=True,data_only=True)
+    try: return _normalize_import_headers(load_workbook(BytesIO(data),read_only=False,data_only=True))
     except Exception as exc:
         try: return raw_xlsx(data)
         except Exception as raw_exc: raise ValueError(f"تعذر قراءة ملف Excel. تأكد أن الملف بصيغة XLSX سليمة. التفاصيل: {exc}") from raw_exc
