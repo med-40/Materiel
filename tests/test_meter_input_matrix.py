@@ -192,11 +192,11 @@ def test_excel_option_accepts_arabic_english_headers_reordered_dates_and_values(
     equipment_km = seed(db, "E-400", "km")
     equipment_hours = seed(db, "E-401", "hours")
     actor = user(db, "excel-matrix")
-    headers = ["Status", "registration number", "Date", "Equipment Type", "Odometer", "Hour meter"]
+    headers = ["Status", "رقم التسجيل", "Date", "الطراز", "Odometer", "Hour meter"]
     rows = [
-        ["working", "E-400", date(2026, 8, 15), "نوع-E-400", "2,000.5", None],
-        ["لا يعمل", "E-401", 46250, "نوع-E-401", None, "٧٥٫٢"],
-        ["available", "E-400", "17/08/2026", "نوع-E-400", "2,100", None],
+        ["working", "E-400", date(2026, 8, 15), "طراز-E-400", "2,000.5", None],
+        ["لا يعمل", "E-401", 46250, "طراز-E-401", None, "٧٥٫٢"],
+        ["available", "E-400", "17/08/2026", "طراز-E-400", "2,100", None],
     ]
     buffer = make_excel(rows, headers)
     response = meter_readings_import_excel(UploadFile(filename="matrix.xlsx", file=buffer), None, db, actor)
@@ -218,8 +218,8 @@ def test_excel_error_identifies_equipment_and_retry_with_corrected_file(db):
     services.create_reading(db, equipment.id, odometer=500, reading_date=datetime(2026, 8, 14))
 
     bad = make_excel(
-        [["E-500", "نوع-E-500", "15/08/2026", 450, None, "يعمل"]],
-        ["رقم التسجيل", "نوع العتاد", "التاريخ", "الكيلومترات", "الساعات", "حالة العداد"],
+        [["E-500", "طراز-E-500", "15/08/2026", 450, None, "يعمل"]],
+        ["رقم التسجيل", "الطراز", "التاريخ", "الكيلومترات", "الساعات", "حالة العداد"],
     )
     response = meter_readings_import_excel(UploadFile(filename="bad.xlsx", file=bad), None, db, actor)
     payload = response.body.decode("utf-8")
@@ -232,8 +232,8 @@ def test_excel_error_identifies_equipment_and_retry_with_corrected_file(db):
     assert db.query(MeterReading).filter(MeterReading.equipment_id == equipment.id).count() == 1
 
     good = make_excel(
-        [["E-500", "نوع-E-500", "16/08/2026", "٥٥٠٫٧", None, "working"]],
-        ["رقم التسجيل", "نوع العتاد", "التاريخ", "الكيلومترات", "الساعات", "حالة العداد"],
+        [["E-500", "طراز-E-500", "16/08/2026", "٥٥٠٫٧", None, "working"]],
+        ["رقم التسجيل", "الطراز", "التاريخ", "الكيلومترات", "الساعات", "حالة العداد"],
     )
     response = meter_readings_import_excel(UploadFile(filename="corrected.xlsx", file=good), None, db, actor)
     payload = response.body.decode("utf-8")
