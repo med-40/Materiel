@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>لصق قراءات العدادات</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f5f7fa;margin:0;color:#173b63}
+.wrap{max-width:1000px;margin:20px auto;padding:14px}.card{background:#fff;border:1px solid #d8e0e8;border-radius:12px;padding:18px;box-shadow:0 2px 10px rgba(15,23,42,.05)}
+h1{margin:0 0 6px}.hint{color:#64748b;font-size:13px;line-height:1.7}.toolbar,.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.btn{border:1px solid #d4dbe3;border-radius:8px;background:#fff;color:#334155;padding:9px 14px;cursor:pointer}.primary{background:#1769d1;color:#fff;border-color:#1769d1}.danger{color:#991b1b;background:#fff1f2;border-color:#fecaca}
+textarea{width:100%;min-height:280px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:9px;padding:12px;direction:ltr;text-align:left;font:13px ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical}
+.status{padding:10px;border-radius:8px;margin-top:10px;background:#f8fafc;color:#334155}.ok{background:#ecfdf5;color:#166534;border:1px solid #bbf7d0}.err{background:#fff1f2;color:#991b1b;border:1px solid #fecaca}.warn{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+table{border-collapse:collapse;width:100%;margin-top:12px;font-size:12px}th,td{padding:8px;border-bottom:1px solid #e2e8f0;text-align:center;white-space:nowrap}th{background:#173b63;color:#fff}.table-wrap{overflow:auto}
+code{background:#eef2f7;padding:2px 5px;border-radius:4px}a{color:#1769d1}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+<h1>لصق قراءات العدادات</h1>
+<p class="hint">هذه طريقة بديلة عن ملف Excel. افتح Excel، حدّد الجدول، انسخه، ثم الصقه هنا. يفضّل أن يتضمن الصف الأول عناوين الأعمدة.</p>
+<p class="hint"><strong>الترتيب المفضل:</strong> الطراز | رقم التسجيل | التاريخ | الكيلومترات | الساعات | حالة العداد</p>
+<p class="hint">يمكن أن تكون حالة العداد <code>يعمل</code> أو <code>لا يعمل</code>. يمكن ترتيب الأعمدة بأي ترتيب.</p>
+<div class="toolbar"><button class="btn" type="button" onclick="insertExample()">إدراج مثال</button><button class="btn danger" type="button" onclick="clearAll()">مسح</button><a class="btn" href="/meter-readings">العودة إلى قراءات العدادات</a></div>
+<textarea id="input" placeholder="الصق هنا الجدول المنسوخ من Excel...\nمثال:\nالطراز\tرقم التسجيل\tالتاريخ\tالكيلومترات\tالساعات\tحالة العداد\n..."></textarea>
+<div class="actions"><button class="btn" type="button" onclick="previewRows()">معاينة البيانات</button><button id="saveBtn" class="btn primary" type="button" onclick="saveRows()">حفظ القراءات</button></div>
+<div id="status" class="status">لم يتم إدخال بيانات بعد.</div>
+<div id="preview"></div>
+</div></div>
+<script>
+const aliases={
+ model:['الطراز','طراز','model','equipment model','equipment_model'],
+ registration:['رقم التسجيل','التسجيل','registration','registration number','registration_number','matricule','immatriculation','reg'],
+ date:['التاريخ','تاريخ القراءة','تاريخ القراءه','date','reading date','reading_date'],
+ km:['الكيلومترات','كيلومترات','الكيلومتر','كيلومتر','الكم','عداد الكيلومترات','عداد كم','km','kilometers','kilometres','odometer'],
+ hours:['الساعات','ساعات','ساعة','عداد الساعات','hours','hour','hour meter','hourmeter'],
+ status:['حالة العداد','حاله العداد','الحالة','status','equipment status','equipment_status'],
+ value:['القراءة','قيمة العداد','قيمه العداد','reading','value','meter','meter reading']
+};
+function norm(v){return String(v??'').trim().toLowerCase().replace(/[أإآٱ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[ـ]/g,'').replace(/\s+/g,'');}
+function kind(v){const n=norm(v);for(const [k,list] of Object.entries(aliases)){if(list.some(x=>norm(x)===n))return k}if(n.includes('تسجيل')||n.includes('registration')||n.includes('matricule')||n.includes('immatriculation'))return 'registration';if(n.includes('طراز')||n.includes('model'))return 'model';if(n.includes('تاريخ')||n.includes('date'))return 'date';if(n.includes('كيلو')||n.includes('كلم')||n.endsWith('km')||n.includes('odometer'))return 'km';if(n.includes('ساع')||n.includes('hour'))return 'hours';if(n.includes('حال')||n.includes('status'))return 'status';if(n.includes('قراء')||n.includes('value')||n.includes('meter'))return 'value';return null}
+function splitLine(line,delimiter){if(delimiter==='\t')return line.split('\t');let out=[],cur='',quote=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(quote&&line[i+1]==='"'){cur+='"';i++;}else quote=!quote;}else if(c===delimiter&&!quote){out.push(cur);cur='';}else cur+=c}out.push(cur);return out}
+function detectDelimiter(text){const first=text.split(/\r?\n/).find(x=>x.trim())||'';if(first.includes('\t'))return '\t';if(first.includes(';'))return ';';return ','}
+function parseInput(){const text=document.getElementById('input').value.trim();if(!text)throw new Error('لم يتم لصق أي بيانات.');const delimiter=detectDelimiter(text);const lines=text.split(/\r?\n/).filter(x=>x.trim());let cells=lines.map(x=>splitLine(x,delimiter));let header=cells[0], kinds=header.map(kind);const required=['registration','date'];const hasHeader=required.every(k=>kinds.includes(k))&&(kinds.includes('km')||kinds.includes('hours')||kinds.includes('value'));if(!hasHeader){kinds=['model','registration','date','km','hours','status'];if(cells[0].length>6)throw new Error('لم يتم التعرف على عناوين الأعمدة. الصق الصف الأول مع العناوين أو استخدم 6 أعمدة بالترتيب المعلن.');}else cells=cells.slice(1);const rows=[];cells.forEach((c,i)=>{if(!c.some(v=>String(v??'').trim()))return;const get=k=>{const idx=kinds.indexOf(k);return idx>=0?(c[idx]??'').trim():''};rows.push({model:get('model'),registration:get('registration'),reading_date:get('date'),km_value:get('km'),hours_value:get('hours'),value:get('value'),equipment_status:get('status'),_row_number:i+(hasHeader?2:1)});});if(!rows.length)throw new Error('لا توجد صفوف بيانات.');return rows}
+let parsedRows=[];
+function previewRows(){const box=document.getElementById('status');try{parsedRows=parseInput();box.className='status ok';box.textContent='تم التعرف على '+parsedRows.length+' صف/صفوف. راجع المعاينة ثم اضغط حفظ القراءات.';renderPreview(parsedRows)}catch(e){parsedRows=[];box.className='status err';box.textContent=e.message;document.getElementById('preview').innerHTML=''}}
+function renderPreview(rows){const shown=rows.slice(0,100);let html='<div class="table-wrap"><table><thead><tr><th>الصف</th><th>الطراز</th><th>رقم التسجيل</th><th>التاريخ</th><th>الكيلومترات</th><th>الساعات</th><th>حالة العداد</th></tr></thead><tbody>';for(const r of shown)html+=`<tr><td>${esc(r._row_number)}</td><td>${esc(r.model)}</td><td>${esc(r.registration)}</td><td>${esc(r.reading_date)}</td><td>${esc(r.km_value)}</td><td>${esc(r.hours_value)}</td><td>${esc(r.equipment_status)}</td></tr>`;html+='</tbody></table></div>';if(rows.length>100)html+='<p class="hint">تظهر أول 100 صف فقط في المعاينة. سيتم إرسال جميع الصفوف.</p>';document.getElementById('preview').innerHTML=html}
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+async function saveRows(){const box=document.getElementById('status');if(!parsedRows.length)previewRows();if(!parsedRows.length)return;if(!confirm('سيتم حفظ '+parsedRows.length+' قراءة. هل تريد المتابعة؟'))return;const btn=document.getElementById('saveBtn');btn.disabled=true;btn.textContent='جارٍ الحفظ...';try{const response=await fetch('/meter-readings/bulk-create',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({rows:parsedRows})});const data=await response.json();box.className='status '+(data.ok?'ok':(data.created?'warn':'err'));let msg=`تم إنشاء: ${data.created??0} — تم تخطي: ${data.skipped??0}`;if(data.message)msg+='\n'+data.message;if(data.errors?.length){msg+='\n\n'+data.errors.join('\n');}box.innerHTML=esc(msg).replace(/\n/g,'<br>');if(data.created&&(!data.errors||!data.errors.length)){setTimeout(()=>location.href='/meter-readings',800)}}catch(e){box.className='status err';box.textContent='تعذر الاتصال بالخادم: '+e.message}finally{btn.disabled=false;btn.textContent='حفظ القراءات'}}
+function insertExample(){document.getElementById('input').value=['الطراز\tرقم التسجيل\tالتاريخ\tالكيلومترات\tالساعات\tحالة العداد','مثال\tMAT001\t2026/08/01\t12500\t\tيعمل','مثال\tMAT002\t2026/08/03\t\t320\tيعمل'].join('\n');previewRows()}
+function clearAll(){document.getElementById('input').value='';document.getElementById('preview').innerHTML='';parsedRows=[];const box=document.getElementById('status');box.className='status';box.textContent='لم يتم إدخال بيانات بعد.'}
+</script>
+</body>
+</html>
