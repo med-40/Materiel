@@ -34,6 +34,10 @@ def _normalize_import_headers(workbook):
         sheet = workbook.active
         for row in sheet.iter_rows(min_row=1, max_row=20):
             for cell in row:
+                # Only text cells are headers/candidate headers. Never stringify
+                # dates or numeric values: doing so breaks Excel date parsing.
+                if not isinstance(cell.value, str):
+                    continue
                 value = _clean_header_text(cell.value)
                 if value == "نوع العداد":
                     cell.value = "نوع العتاد"
@@ -48,6 +52,9 @@ def _normalize_import_headers(workbook):
 def _normalize_raw_headers(rows):
     for row in rows[:20]:
         for idx, value in enumerate(row):
+            # Preserve numeric Excel serials and other non-text data.
+            if not isinstance(value, str):
+                continue
             value = _clean_header_text(value)
             if value == "نوع العداد":
                 value = "نوع العتاد"
