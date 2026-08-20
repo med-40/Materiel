@@ -140,7 +140,7 @@ def _read_excel_rows(file, db):
             kind = _header_kind(value)
             if kind and kind not in kinds: kinds[kind] = idx
         if ({"equipment_model", "registration", "date", "status"}.issubset(kinds) or {"equipment_type", "registration", "date", "status"}.issubset(kinds)) and ({"km", "hours", "legacy"} & set(kinds)): header_info = (row_number, kinds); break
-    if header_info is None: raise ValueError("لم يتم التعرف على أعمدة Excel. يجب أن يحتوي الملف على: الطراز، رقم التسجيل، التاريخ، العداد، وحالة العداد.")
+    if header_info is None: raise ValueError("لم يتم التعرف على أعمدة Excel. يجب أن يحتوي الملف على: الطراز، رقم التسجيل، التاريخ، الكيلومترات أو الساعات، وحالة العداد.")
     header_row, columns = header_info; import_rows, parse_errors, data_row_count = [], [], 0
     for row_number, values in enumerate(rows[header_row:], start=header_row + 1):
         if not any(value is not None and str(value).strip() for value in values): continue
