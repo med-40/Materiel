@@ -1,0 +1,39 @@
+name: Fix Excel import error message
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/fix_excel_error_message.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-message:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update only the Excel error message
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("app/modules/meter_readings/router.py")
+          text = path.read_text(encoding="utf-8")
+          old = "لم يتم التعرف على أعمدة Excel. يجب أن يحتوي الملف على: الطراز، رقم التسجيل، التاريخ، العداد، وحالة العداد."
+          new = "لم يتم التعرف على أعمدة Excel. يجب أن يحتوي الملف على: الطراز، رقم التسجيل، التاريخ، الكيلومترات أو الساعات، وحالة العداد."
+          if old not in text:
+              raise SystemExit("Target error message was not found; no change made.")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/modules/meter_readings/router.py
+          git commit -m "Fix Excel import error message"
+          git push
